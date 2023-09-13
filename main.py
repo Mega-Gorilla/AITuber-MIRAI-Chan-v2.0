@@ -18,7 +18,12 @@ async def handle_results(queue):
 
 async def main():
     queue = asyncio.Queue()
-    handler = SpeechHandler(queue,speech_key, speech_region)
+    handler = SpeechHandler(queue=queue,
+                            producer_id="speech",
+                            speech_key=speech_key, 
+                            speech_region=speech_region,
+                            TimeoutMs='1000',
+                            debug=False)
 
     # Start a task to handle results
     asyncio.create_task(handle_results(queue))
