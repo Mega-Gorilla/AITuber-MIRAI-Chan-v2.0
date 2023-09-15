@@ -4,7 +4,7 @@ import asyncio
 import time,sys,json,os
 from rich import print
 from rich.console import Console
-from rich_desgin import error
+from module.rich_desgin import error
 
 class GPT_request:
     def old_mirai_prompt(self):
@@ -50,8 +50,10 @@ user->相手の飲み物を飲むことで間接的にキスをすることに�
     async def add_to_queue(self,queue, producer_id, content):
         await queue.put({"ID": producer_id, "message": content})
 
-    async def GPT_Stream(self,queue, producer_id, OpenAI_key,Prompt=[{"system":"You are a helpful assistant."},{"user":"Hello!"}],temp=0,tokens_max=2000,model="gpt-4",max_retries=3):
+    async def GPT_Stream(self,queue, producer_id, OpenAI_key,Prompt=[{"system":"You are a helpful assistant."},{"user":"Hello!"}],temp=0,tokens_max=2000,model="gpt-4",max_retries=3,debug=False):
         openai.api_key=OpenAI_key
+        if debug:
+            print(f'Start {model}')
         #OpenAIのエラーリスト
         gpt_error_mapping = {
             openai.error.APIError: ("OpenAI API Error", "しばらく時間をおいてからリクエストを再試行し、問題が解決しない場合は弊社までご連絡ください。", 'sleep'),
@@ -76,7 +78,7 @@ user->相手の飲み物を飲むことで間接的にキスをすることに�
         while retry_count < max_retries:
             try:
                 gpt_result = openai.ChatCompletion.create(
-                    model="gpt-4",
+                    model=model,
                     messages=Prompts,
                     stream=True,
                     temperature=temp,
@@ -88,7 +90,7 @@ user->相手の飲み物を飲むことで間接的にキスをすることに�
                 for chunk in gpt_result:
                     content = chunk["choices"][0].get("delta", {}).get("content")
                     if content is not None:
-                        print(content,end=None)
+                        #print(content,end=None)
                         await queue.put({"ID": producer_id, "message": content})
                         await asyncio.sleep(0.01)
                 break
@@ -101,7 +103,7 @@ user->相手の飲み物を飲むことで間接的にキスをすることに�
                 if action == 'exit':
                     sys.exit(1)
                 elif action == 'sleep':
-                    time.sleep(1)
+                    await asyncio.sleep(1)
 
 async def handle_results(queue):
     while True:
@@ -117,7 +119,7 @@ async def main():
     GPT_stream = gpt_instance.GPT_Stream(queue, "GPT_stream", os.getenv("OPENAI_API_KEY"), Prompt=[{'system': gpt_instance.old_mirai_prompt()},{'user':"こんばんわ"}])
 
     consumer_task = asyncio.create_task(handle_results(queue))
-    producer_task = asyncio.create_task(GPT_stream)
+    producer_task = GPT_stream
     
     await producer_task
 
