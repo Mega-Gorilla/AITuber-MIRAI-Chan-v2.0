@@ -2,7 +2,6 @@
 import azure.cognitiveservices.speech as speechsdk
 import os
 import asyncio
-import time
 from rich import print
 
 class SpeechHandler:
@@ -49,15 +48,13 @@ class SpeechHandler:
         self.speech_recognizer.recognized.connect(self._recognized_handler)
         self.speech_recognizer.session_started.connect(self.session_started)
         
-        if self.debug:
-            print("[green]Speak into your microphone.[/green]")
+        print("[green]Speak into your microphone.[/green]")
 
         self.speech_recognizer.start_continuous_recognition()
         while not self.done:
-            time.sleep(0.1)
+            await asyncio.sleep(0.5)
         
-        if self.debug:
-            print("[red]Azure Speech Stopped..[/red]")
+        print("[red]Azure Speech Stopped..[/red]")
             
         self.speech_recognizer.stop_continuous_recognition()
         await self.queue.put({"ID":self.producer_id,"message":self.result_text})
