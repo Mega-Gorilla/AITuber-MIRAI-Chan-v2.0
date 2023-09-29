@@ -1,33 +1,73 @@
 #API.py
 from module.azure_speech_handler import SpeechHandler
-from module.GPT_request import GPT_request
-from test_async import test_async
-from job_manager import JobManager
 from rich import print
 from fastapi import FastAPI
-from pydantic import BaseModel
 import os
-import openai
 import asyncio
 import time
+import httpx
 
 #keys
-azure_key = os.getenv("AZURE_API_KEY")
+speech_key = os.getenv("AZURE_API_KEY")
 speech_region = "japaneast"
-openai_key = os.getenv("OPENAI_API_KEY")
+
+#URL
+openai_post = "http://127.0.0.1:8000/requst/openai-post"
+openai_get = "http://127.0.0.1:8000/requst/openai-get/queue"
+
+#global
+UserName = "猩々博士"
+talkFlag = False
+speechToText = True
 
 #FastAPI
 app = FastAPI()
-job_manager = JobManager()
+@app.post("/request/genereteTalk",tags=["Request"])
+async def TalkJob_request():
+    global talkFlag
+    talkFlag = True
+    return{"/request/genereteTalk":talkFlag}
 
-#Get Job Status
-@app.get("/jobs/{job_name}")
-async def read_job_status(job_name: str):
-    return {job_name: job_manager.get_status(job_name)}
-#Get job list
-@app.get("/job_list/")
-async def read_job_list():
-    return job_manager.get_job_list()
+@app.post("/request/speechToText",tags=["Request"])
+async def speechToText_request():
+    global speechToText
+    speechToText = not speechToText
+    return{"/request/speechToText":speechToText}
+
+#GPT Manager
+async def request_GPT(prompt_name, user_prompt, variables,stream):
+    data = {
+        "user_assistant_prompt": user_prompt,
+        "variables": variables
+    }
+    # オプションのクエリパラメータ
+    params = {
+        "stream": stream  # または True
+    }
+    request_URL = (f"{openai_post}/{prompt_name}")
+    
+    print(data)
+    async with httpx.AsyncClient() as client:
+        response = await client.post(request_URL, json=data, params=params)
+        return {"ID":'talkStr',"message":response}
+    
+async def get_queue_request(url):
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            return response.json()
+
+    except httpx.HTTPError as http_err:
+        if http_err.response.status_code == 404:
+            print("404 Error occurred. Stopping the loop.")
+            return None
+        else:
+            print(f"An HTTP error occurred: {http_err}")
+            return None
+    except Exception as err:
+        print(f"An error occurred: {err}")
+        return None
 
 #新しいasyncioタスクを作成するプロセス
 async def create_tasks(task_queue):
@@ -42,23 +82,12 @@ async def create_tasks(task_queue):
                 newjob = asyncio.create_task(task[1])
                 job_manager.add_job(task[0],newjob)
 
-async def Create_StreamGPT_task(task_queue,result_queue,producer_id,openai_key,prompt,temp=1,tokens_max=2000,model_name='gpt-4',max_retries=3,debug=False):
-    gpt_instance = GPT_request()
-    GPT_stream = gpt_instance.GPT_Stream(result_queue, 
-                                        producer_id, 
-                                        openai_key, 
-                                        prompt,
-                                        temp,
-                                        tokens_max,
-                                        model_name,
-                                        max_retries,
-                                        debug)
-    await task_queue.put(["GPT_stream",GPT_stream])
-
 # result_queueを監視し、新しい関数が入力されたら処理するプロセス
+#handle_resultsは無限ループする。
 async def handle_results(result_queue,task_queue):
-    speech_str=''
-    last_speech_time=time.time()
+    chatLog=''
+    summary=''
+    mirai_example=''
 
     while True:
         result = await result_queue.get()
@@ -66,11 +95,29 @@ async def handle_results(result_queue,task_queue):
         print(result["message"],end=None)
         
         if result["ID"] == 'speech':
-            if time.time()-last_speech_time > job_manager.auto_speech_delay: #一定時間経過した場合の読み上げ
-                await Create_StreamGPT_task(task_queue,result_queue,'mirai_talk',openai_key,)
+            #User 会話履歴の追加
+            userTalkStr=result['message']
+            chatLog += (f"{UserName}:{userTalkStr}\n")
 
+            #メモリより類似会話の検索
+
+            if talkFlag: #Talkボタンが押された時
+                global talkFlag
+                talkFlag = False
+
+                miraiChanTalkStr= await request_GPT(prompt_name='miraiV2.json',
+                                  user_prompt=[],
+                                      variables={
+                                          "chatLog":chatLog,
+                                          "summary":summary,
+                                          "mirai_example":mirai_example},
+                                          stream=True)
+                #みらい　会話履歴の追加
+                chatLog+=(f"Mirai:{miraiChanTalkStr}\n")
+                result_queue.put(miraiChanTalkStr)
+        
+        
         await asyncio.sleep(0.1)
-
 
 async def main():
     task_queue = asyncio.Queue(maxsize=10)
@@ -86,21 +133,17 @@ async def main():
     speech_task = None
 
     # Start a task to handle results
-    process_result_task=asyncio.create_task(handle_results(result_queue,task_queue))
-    job_manager.add_job("process_result_task",process_result_task)
+    asyncio.create_task(handle_results(result_queue,task_queue))
 
     while True:
-
-        if speech_task is None or speech_task.done():
+        
+        #Azure Speechが終了or実行されていない時、Speechを起動する。
+        if  speechToText and (speech_task is None or speech_task.done()):
             speech_task=asyncio.create_task(handler.from_mic())
-            job_manager.add_job("speech_task", speech_task)
         
         await create_tasks(task_queue)
             
         await asyncio.sleep(0.5)
 
 if __name__ == "__main__":
-    speech_key = os.getenv("AZURE_API_KEY")
-    speech_region = "japaneast"
-
     asyncio.run(main())
