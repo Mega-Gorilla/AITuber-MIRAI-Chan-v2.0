@@ -15,6 +15,7 @@ speech_region = "japaneast"
 
 #Streamer memory
 directory = 'C:/Users/MegaGorilla/Documents/AI/AI_tuber_Train_Data/音声→文字データ/2.字幕_クリーニング済み'
+streamer_vector_path = 'data/streamer_vector.pkl'
 
 #URL
 BASE_URL = "http://127.0.0.1:8000"
@@ -111,7 +112,7 @@ async def handle_results(result_queue,task_queue):
 
     #Streamer Example
     print("ベクトルを作成中....")
-    finder = AnswerFinder(directory)
+    finder = AnswerFinder(directory,streamer_vector_path)
     print("ベクトル作成完了")
 
     while True:
