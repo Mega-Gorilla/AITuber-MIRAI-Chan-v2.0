@@ -66,7 +66,7 @@ def csv_to_dict(csv_path, key_col, value_col):
     """
     result_dict = {}
     
-    with open(csv_path, 'r', encoding='utf-8') as f:
+    with open(csv_path, 'r', encoding='utf-8-sig') as f:
         reader = csv.DictReader(f)
         for row in reader:
             key = row[key_col]
@@ -104,16 +104,39 @@ async def update_csv_from_dict(csv_path, dict_data, value_colname):
     with open(csv_path, 'r', encoding='utf-8') as f:
         reader = csv.DictReader(f)
         for row in reader:
-            if row[value_colname] in dict_data:
-                row[value_colname] = dict_data[row[value_colname]]
+            if row['FruitName'] in dict_data:
+                row[value_colname] = dict_data[row['FruitName']]
+                # 更新されたデータは辞書から削除
+                del dict_data[row['FruitName']]
             rows.append(row)
-    
+
+    # 辞書に残っているデータをCSVに追加
+    for key, value in dict_data.items():
+        rows.append({value_colname: key, 'Description': value})
+
     # CSVデータを更新して書き込む
     with open(csv_path, 'w', newline='', encoding='utf-8') as f:
         writer = csv.DictWriter(f, fieldnames=reader.fieldnames)
         writer.writeheader()
         for row in rows:
             writer.writerow(row)
+
+def delete_file_in_directory(filename, directory_path):
+    """
+    指定したディレクトリ内の特定のファイル名を持つファイルを削除します。
+
+    :param filename: 削除するファイルの名前
+    :param directory_path: ファイルを検索するディレクトリのパス
+    """
+    
+    # ディレクトリ内のすべてのファイルをループする
+    for f in os.listdir(directory_path):
+        # ファイル名が指定されたものと一致する場合、そのファイルを削除
+        if f == filename:
+            os.remove(os.path.join(directory_path, f))
+            print(f"{filename} has been deleted.")
+            return
+    print(f"{filename} not found in {directory_path}.")
 
 async def wait_until_done_or_timeout(base_url, endpoint, timeout=30):
     """
@@ -159,6 +182,10 @@ async def main():
     for key, value in dictionary.items():
         if value == "":
             filtered_dict[key] = value
+
+    if filtered_dict=={}:
+        print(f"{directory} に、説明の無いanimファイルは見つかりませんでした。")
+        return
     print(f"説明がないanimファイルが見つかりました:\n {filtered_dict}")
 
     for key, value in filtered_dict.items():
@@ -175,7 +202,14 @@ async def main():
             input_data = input("アニメーションの説明を代入してください:\n")
             if input_data !="":
                 break
-        await update_csv_from_dict(os.path.join(directory, csv_filename),{key:input_data},"説明")
+        #NGの時はデータごと消去
+        if input_data == 'NG':
+            delete_file_in_directory(key+'.anim.meta',directory)
+            delete_file_in_directory(key+'.anim',directory)
+        else:
+            dictionary[key] = input_data
+            #CSVファイルに書き込み
+            await update_csv_from_dict(os.path.join(directory, csv_filename),{key:input_data},"説明")
 
 if __name__ == "__main__":
     asyncio.run(main())
