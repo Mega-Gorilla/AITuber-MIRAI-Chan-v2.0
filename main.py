@@ -46,7 +46,7 @@ def display_table(data_history, columns):
 #
 async def post_data(data_dict):
     async with httpx.AsyncClient() as client:
-        response = await client.post(f"{BASE_URL}/custom/add", json=data_dict)
+        response = await client.post(f"{BASE_URL}/custom/add/A", json=data_dict)
         if response.status_code == 200:
             return response.json()
         else:
@@ -55,7 +55,7 @@ async def post_data(data_dict):
 
 async def get_data():
     async with httpx.AsyncClient() as client:
-        response = await client.get(f"{BASE_URL}/custom/get_data/")
+        response = await client.get(f"{BASE_URL}/custom/get_data/A")
         if response.status_code == 200:
             return response.json()
         else:
