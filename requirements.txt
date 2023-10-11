@@ -1,3 +1,6 @@
 azure-cognitiveservices-speech
 rich
 openai
+streamlit
+janome
+httpx
