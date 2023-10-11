@@ -2,14 +2,28 @@ import asyncio
 import httpx  # 非同期HTTPクライアント
 import os,csv
 
-
 async def post_data_to_server(base_url, endpoint, data):
+    """
+    指定したサーバーのエンドポイントにデータを非同期的にPOSTします。
+
+    :param base_url: サーバーのベースURL
+    :param endpoint: データをPOSTするエンドポイント
+    :param data: POSTするデータ
+    :return: httpxのレスポンスオブジェクト
+    """
     full_url = base_url.rstrip('/') + '/' + endpoint.lstrip('/')  # URLを結合
     async with httpx.AsyncClient() as client:  # 非同期HTTPクライアントのインスタンスを作成
         response = await client.post(full_url, json=data)  # 非同期でPOSTリクエストを実行
     return response
 
 async def get_data_from_server(base_url, endpoint):
+    """
+    指定したサーバーのエンドポイントからデータを非同期的にGETします。
+
+    :param base_url: サーバーのベースURL
+    :param endpoint: データを取得するエンドポイント
+    :return: エンドポイントから取得したデータのJSONオブジェクト、またはエラーの場合はNone
+    """
     full_url = base_url.rstrip('/') + '/' + endpoint.lstrip('/')  # URLを結合
     async with httpx.AsyncClient() as client:
         response = await client.get(full_url)
@@ -20,57 +34,97 @@ async def get_data_from_server(base_url, endpoint):
             return None
 
 async def get_files_with_extension(directory, extension):
+    """
+    指定したディレクトリ内の特定の拡張子を持つファイルの名前を非同期に取得します。
+
+    :param directory: ファイルを検索するディレクトリのパス
+    :param extension: 検索するファイルの拡張子（例：'.txt'）
+    :return: 指定された拡張子を持つファイルの名前のリスト
+    """
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, find_files_with_extension, directory, extension)
 
 def find_files_with_extension(directory, extension):
+    """
+    指定したディレクトリ内の特定の拡張子を持つファイルの名前を取得します。
+
+    :param directory: ファイルを検索するディレクトリのパス
+    :param extension: 検索するファイルの拡張子（例：'.txt'）
+    :return: 指定された拡張子を持つファイルの名前のリスト
+    """
     extension_files = [os.path.splitext(os.path.basename(f))[0] for f in os.listdir(directory) if f.endswith(extension)]
     return extension_files
 
-#フォルダ内のanimファイルを取得しCSVに存在しないanimがあった場合csvに追加する。
-async def update_csv_file(directory,csv_file_name):
-    #ディレクトリ内のaimファイルリストを取得
-    anim_files = await get_files_with_extension(directory, ".anim")
-    #CSVファイルのaimリストを取得
-    existing_filenames = read_existing_filenames_from_csv(os.path.join(directory, csv_file_name))
-    new_files = [filename for filename in anim_files if filename not in list(existing_filenames.keys())]
-    if new_files:
-            append_to_csv(os.path.join(directory, csv_file_name), new_files)
-
-async def update_csv_column(directory,csv_file_name, search_str, replacement_str):
-    # CSVファイルを読み込む
-    with open(os.path.join(directory, csv_file_name), 'r', newline='', encoding='utf-8') as file:
-        rows = list(csv.reader(file))
-        
-    # 文字列Aに一致する行を検索し、文字列Bで2列目を更新する
-    for row in rows:
-        if row[0] == search_str:
-            if len(row) > 1:
-                row[1] = replacement_str
-            else:
-                row.append(replacement_str)
+def csv_to_dict(csv_path, key_col, value_col):
+    """
+    CSVファイルから、指定されたKey列とValue列を使用して辞書を作成します。
+    
+    :param csv_path: CSVファイルのパス
+    :param key_col: Keyとして使用する列の名前
+    :param value_col: Valueとして使用する列の名前
+    :return: 作成された辞書
+    """
+    result_dict = {}
+    
+    with open(csv_path, 'r', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            key = row[key_col]
+            value = row[value_col]
+            result_dict[key] = value
             
-    # 更新したデータでCSVファイルを書き戻す
-    with open(os.path.join(directory, csv_file_name), 'w', newline='', encoding='utf-8') as file:
-        writer = csv.writer(file)
-        writer.writerows(rows)
+    return result_dict
 
-def read_existing_filenames_from_csv(csv_filename):
-    with open(csv_filename, 'r', newline='', encoding='utf-8') as file:
-        reader = csv.reader(file)
-        # ヘッダー行をスキップ
-        next(reader, None)  # None を指定して、ファイルに行がない場合のエラーを避ける
-        # 1列目をキー、2列目を値として辞書を作成
-        return {row[0]: row[1] if len(row) > 1 else "" for row in reader}
+def update_dict_from_list(dict_a, list_b):
+    """
+    辞書配列Aのkey文字列と配列Bの文字列を比較して、一致しない文字列が配列Bにある時、
+    その文字列をKeyとして辞書配列Aに加える。その際の追加したKeyのValueは""とする。
 
+    :param dict_a: 元の辞書
+    :param list_b: 比較する文字列のリスト
+    :return: 更新された辞書
+    """
+    for item in list_b:
+        if item not in dict_a:
+            dict_a[item] = ""
 
-def append_to_csv(csv_filename, filenames):
-    with open(csv_filename, 'a', newline='', encoding='utf-8') as file:
-        writer = csv.writer(file)
-        for filename in filenames:
-            writer.writerow([filename])
+    return dict_a
+
+async def update_csv_from_dict(csv_path, dict_data, value_colname):
+    """
+    CSVファイルの指定された列を、辞書のキーに基づいて更新します。
+    :param csv_path: 更新するCSVファイルのパス
+    :param dict_data: キーと更新する値を持つ辞書
+    :param value_colname: 更新するCSVの列名
+    :return: None
+    """
+    rows = []
+
+    # CSVデータを読み込む
+    with open(csv_path, 'r', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            if row[value_colname] in dict_data:
+                row[value_colname] = dict_data[row[value_colname]]
+            rows.append(row)
+    
+    # CSVデータを更新して書き込む
+    with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=reader.fieldnames)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(row)
 
 async def wait_until_done_or_timeout(base_url, endpoint, timeout=30):
+    """
+    指定したサーバーのエンドポイントからデータを非同期的に取得し、
+    'animation' キーが存在する場合、そのキーの値だけ待機します。
+    'animation' キーが存在しない場合、指定したタイムアウト時間まで待機します。
+
+    :param base_url: サーバーのベースURL
+    :param endpoint: データを取得するためのエンドポイント
+    :param timeout: タイムアウトするまでの最大待機時間（秒）
+    """
     start_time = asyncio.get_running_loop().time()
     while True:
         response = await get_data_from_server(base_url, endpoint)
@@ -91,26 +145,23 @@ async def wait_until_done_or_timeout(base_url, endpoint, timeout=30):
 
 async def main():
     directory = "C:\\Users\\MegaGorilla\\Documents\\Unity\\VRM Motion\\Assets\\Resources\\Animation"
+    csv_filename = "anim_description.csv"
+
     anim_files = await get_files_with_extension(directory, ".anim")
     print(f"フォルダ内にあるanimファイル: {anim_files}")
 
-    #update CSV
-    csv_filename = "anim_description.csv"
-    await update_csv_file(directory,csv_filename)
+    #CSVデータを辞書配列で取得
+    csv_dictionary = csv_to_dict(os.path.join(directory, csv_filename),'ファイル名','説明')
+    #辞書配列とフォルダ内animファイルを比較して、辞書配列に存在しないanimファイル名をkeyとして辞書配列に追加
+    dictionary = update_dict_from_list(csv_dictionary,anim_files)
 
-    #Get CSV Data
-    csv_data = read_existing_filenames_from_csv(os.path.join(directory, csv_filename))
     filtered_dict = {}
-    empty_value_dict = {}
-    for key, value in csv_data.items():
-        if value != "":
+    for key, value in dictionary.items():
+        if value == "":
             filtered_dict[key] = value
-        else:
-            empty_value_dict[key] = value
-    print(f"説明があるanimファイル: {filtered_dict}")
-    print(f"説明がないanimファイル: {empty_value_dict}")
+    print(f"説明がないanimファイルが見つかりました:\n {filtered_dict}")
 
-    for key, value in empty_value_dict.items():
+    for key, value in filtered_dict.items():
         data = {
             "VRM_expression": "Neutral",
             "VRM_animation": key
@@ -124,7 +175,7 @@ async def main():
             input_data = input("アニメーションの説明を代入してください:\n")
             if input_data !="":
                 break
-        await update_csv_column(directory,csv_filename,key,input_data)
+        await update_csv_from_dict(os.path.join(directory, csv_filename),{key:input_data},"説明")
 
 if __name__ == "__main__":
     asyncio.run(main())
