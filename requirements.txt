@@ -4,7 +4,6 @@ openai
 streamlit
 janome
 httpx
-pydub
 sounddevice
 numpy
 
