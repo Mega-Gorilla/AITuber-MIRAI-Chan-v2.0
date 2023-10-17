@@ -1,10 +1,8 @@
 import os
 import asyncio
-from pydub import AudioSegment
 import sounddevice as sd
 import numpy as np
 import wave
-import time
 
 async def GnenereteVoiceData(script, 
                              narrator="Koharu Rikka", 
@@ -36,11 +34,14 @@ async def GnenereteVoiceData(script,
         "-o", outpath,
         "-e", f"hightension={hightension},livid={livid},lamenting={lamenting},despising={despising},narration={narration}"
     ]
-    print(args)
     # プロセスを実行
     process = await asyncio.create_subprocess_exec(*args)
     # プロセスが終了するまで待機
     await process.communicate()
+
+    #再生秒数を計算
+    duration = get_wav_duration(outpath)
+    return  round(duration * 100) / 100
 
 async def PlayVoiceData(audio_dir=os.path.join(os.path.dirname(os.path.abspath(__file__)), "wav"),audio_fileName="output.wav",play_device_num=4):
     audio_path = os.path.join(audio_dir, audio_fileName)
@@ -60,8 +61,14 @@ async def PlayVoiceData(audio_dir=os.path.join(os.path.dirname(os.path.abspath(_
         stream.write(audio_float32)
 
     # wavファイルを削除
-    print(f"remove: {audio_path}")
-    #os.remove(audio_path)
+    os.remove(audio_path)
+
+def get_wav_duration(filename):
+    with wave.open(filename, 'rb') as wf:
+        frames = wf.getnframes()
+        rate = wf.getframerate()
+        duration = frames / float(rate)
+        return duration
 
 def get_audio_devices():
     """
@@ -106,9 +113,14 @@ async def main(chosen_device):
     for sentence in sentences:
 
         # 音声データを生成
-        await GnenereteVoiceData(sentence)
+        speak_time = await GnenereteVoiceData(sentence)
+        print(f"音声時間: {speak_time}")
         # 音声データを再生
-        await PlayVoiceData(play_device_num=chosen_device)
+        #await PlayVoiceData(play_device_num=chosen_device)
+        # 音声データをバックグラウンドで再生
+        asyncio.create_task(PlayVoiceData(play_device_num=chosen_device))
+    
+    await asyncio.gather(*asyncio.all_tasks())
 
 if __name__ == "__main__":
     get_audio_devices()
