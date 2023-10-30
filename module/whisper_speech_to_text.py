@@ -1,4 +1,5 @@
 from faster_whisper import WhisperModel
+from module.rich_desgin import error
 import sounddevice as sd
 import numpy as np
 import asyncio
@@ -12,8 +13,12 @@ class speech_to_text:
         self.DTYPE = np.int16
         self.THRESHOLD = 500  # 無音判定のしきい値
         self.SILENCE_DURATION = 0.4 * self.SAMPLE_RATE  # 0.5秒
-        self.recording_state = {"is_recording": True}
-
+        self.recording_state = True
+    
+    def change_recording_state(self,flag):
+        self.recording_state = flag
+        return
+    
     def create_whisper_model(self,model_size = "large-v2", device="cuda", compute_type="float16"):
         model = WhisperModel(model_size, device=device, compute_type=compute_type)
         return model
@@ -43,8 +48,44 @@ class speech_to_text:
         # Avoid clipping
         amplified = np.clip(amplified, np.iinfo(self.DTYPE).min, np.iinfo(self.DTYPE).max)
         return amplified.astype(self.DTYPE)
+    
+    def record_audio(self, audio_queue):
+        buffer = []
+        silent_samples = 0
+        is_sound_detected = False  # 音が検出されたかどうかのフラグ
 
-    async def record_audio(self,audio_queue):
+        with sd.InputStream(samplerate=self.SAMPLE_RATE, channels=self.CHANNELS) as stream:
+            print("Start Recording..")
+            while self.recording_state:
+                audio_chunk, overflowed = stream.read(self.SAMPLE_RATE)
+                audio_chunk = audio_chunk * (2**15)  # 16-bit PCM
+                audio_chunk = audio_chunk.astype(self.DTYPE)
+
+                # フィルタ処理
+                audio_chunk = self.noise_gate(audio_chunk, self.THRESHOLD)
+
+                # 初めての音声検出
+                if not is_sound_detected and np.abs(audio_chunk).mean() > self.THRESHOLD:
+                    is_sound_detected = True
+
+                if is_sound_detected:
+                    buffer.extend(audio_chunk)
+
+                    # 無音部分の検出
+                    if np.abs(audio_chunk).mean() < self.THRESHOLD:
+                        silent_samples += len(audio_chunk)
+                    else:
+                        silent_samples = 0
+
+                    # 1秒以上の無音があればバッファをキューに追加してリセット
+                    if silent_samples > self.SILENCE_DURATION:
+                        arr = np.array(buffer)
+                        audio_queue.put(arr)
+                        buffer = []
+                        silent_samples = 0
+                        is_sound_detected = False
+
+    async def record_audio_async(self,audio_queue):
         loop = asyncio.get_event_loop()
         buffer = []
         silent_samples = 0
@@ -52,7 +93,7 @@ class speech_to_text:
 
         with sd.InputStream(samplerate=self.SAMPLE_RATE, channels=self.CHANNELS) as stream:
             print("Start Recording..")
-            while self.recording_state["is_recording"]:
+            while self.recording_state:
                 audio_chunk, overflowed = await loop.run_in_executor(None, lambda: stream.read(self.SAMPLE_RATE))
                 audio_chunk = audio_chunk * (2**15)  # 16-bit PCM
                 audio_chunk = audio_chunk.astype(self.DTYPE)
@@ -66,7 +107,7 @@ class speech_to_text:
 
                 if is_sound_detected:
                     buffer.extend(audio_chunk)
-                    await asyncio.sleep(0)
+                    await asyncio.sleep(0.1)
 
                     # 無音部分の検出
                     if np.abs(audio_chunk).mean() < self.THRESHOLD:
@@ -90,10 +131,15 @@ class speech_to_text:
     
     async def process_audio(self, audio_queue, text_queue, model):
         loop = asyncio.get_event_loop()
-        while self.recording_state["is_recording"]:
+        while True:
             if audio_queue.qsize()==0:
-                await asyncio.sleep(1)
-                continue
+                if self.recording_state:
+                    await asyncio.sleep(0.5)
+                    continue
+                else:
+                    print(f"Whisper 修了 {self.recording_state['is_recording']}")
+                    break
+
             audio_data = await audio_queue.get()
             amplified_audio = self.amplify(audio_data, 2.0)  # Amplify by a factor of 2
             audio_bytesio = await loop.run_in_executor(None, lambda: self.audio_to_bytesio(amplified_audio, self.SAMPLE_RATE))
@@ -102,13 +148,13 @@ class speech_to_text:
             await asyncio.sleep(0)
             for segment in segments:
                 #print("[%.2fs -> %.2fs] %s" % (segment.start, segment.end, segment.text))
-                print(segment.text)
-                await text_queue.put(segment.text)
+                #print(segment.text)
+                await text_queue.put({"whisper_text":segment.text})
                 await asyncio.sleep(0)
         return
 
-    def mic_to_text_retun_task(self, model, audio_queue, text_queue):
-        recorder_task = self.record_audio(audio_queue)
+    def mic_to_text_retun_task(self,  audio_queue, text_queue,model=None,):
+        recorder_task = self.record_audio_async(audio_queue)
         audio_to_text_task = self.process_audio(audio_queue, text_queue, model)
         return recorder_task, audio_to_text_task
 
