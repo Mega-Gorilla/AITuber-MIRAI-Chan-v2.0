@@ -11,6 +11,7 @@ import dill
 import os
 import asyncio
 import httpx
+from httpx import ConnectError, HTTPStatusError
 
 #Streamer memory
 directory = 'C:/Users/MegaGorilla/Documents/AI/AI_tuber_Train_Data/音声→文字データ/2.字幕_クリーニング済み'
@@ -20,13 +21,6 @@ streamer_vector_path = 'data/streamer_vector.pkl'
 GPT_Mangaer_URL = "http://127.0.0.1:8000"
 AI_Tuber_URL = "http://127.0.0.1:8001"
 
-#promptSettings
-UserName = "猩々博士"
-chara_profile="""みらい-女子高生ギャルAITuber。AIだが配信者をしている。
-博士-みらいの開発者。正体はゴリラ。"""
-
-talkFlag = False
-speechToText_bool = True #マイクON-OFF
 console = Console()
 
 def display_table(data_history, columns):
@@ -61,61 +55,106 @@ def display_table(data_history, columns):
     console.print(table)
 
 # 非同期関数としてデータをPOSTするための関数
-async def post_data_from_server(post_data,URL):
+async def post_data_from_server(URL,post_data,post_params=None,max_retries=3, delay=1, timeout=60.0):
     """
     非同期的にデータを指定されたURLにPOSTする関数。
     Parameters:
-    - data_dict (dict): POSTするデータを含む辞書。
+    - URL: データを取得するURL。
+    - post_data: POSTリクエストとともに送信されるデータ。
+    - post_params: POSTリクエストとともに送信されるクエリパラメータ。
+    - max_retries: 最大再問合せ回数。
+    - delay: 再問合せの間隔（秒）。
+    - timeout: リクエストのタイムアウト秒数。
     Returns:
     - dict or None: 成功時にはレスポンスのJSONデータを返し、失敗時にはNoneを返す。
     """
-    # httpxの非同期クライアントを使用して非同期的なリクエストを行う
-    async with httpx.AsyncClient() as client:
-        
-        # BASE_URLに設定されたURLに対して、'/custom/add/A'のエンドポイントにデータをPOSTする
-        if isinstance(post_data,dict):
-            response = await client.post(URL, json=post_data)
-        elif isinstance(post_data,list):
-            response = await client.post(URL, json=post_data)
-        else:
-            print(f"Post at Raw mode. / Data: {post_data}")
-            response = await client.post(URL, post_data)
+    
+    retries = 0
 
-        # レスポンスのステータスコードが200（成功）の場合
-        if response.status_code == 200:
-            # レスポンスのJSONデータを返す
-            return response.json()
-        else:
-            # ステータスコードが200以外の場合はエラーメッセージを表示して、Noneを返す
-            error("FastAPI_Error", "Failed to post data.", {"Status Code": response.status_code, "URL": URL})
-            return None
+    while retries < max_retries:
+        try:
+            request_kwargs = {
+                'url':URL
+            }
+            # データを適切な形式でリクエストに追加
+            if isinstance(post_data, (dict, list)):  # post_dataが辞書型またはリスト型の場合
+                request_kwargs["json"] = post_data
+            else:  # それ以外の場合、生のデータとして扱う
+                request_kwargs["data"] = post_data
+            # クエリパラメータをリクエストに追加
+            if post_params is not None:
+                request_kwargs["params"] = post_params
+
+            # httpxの非同期クライアントを使用して非同期的なリクエストを行う
+            async with httpx.AsyncClient(timeout) as client:
+                response = await client.post(**request_kwargs)
+                # レスポンスのステータスコードが200（成功）の場合
+                response.raise_for_status()
+                # レスポンスのJSONデータを返す
+                return response.json()
+
+        except ConnectError as e:
+            # 接続エラーが発生した場合は、エラーメッセージを表示して、Noneを返す
+            error("Connection Error:", f"{e}", {"Mode":"Post","URL": URL,"Request Data":request_kwargs,"Request Count":retries})
+            retries += 1
+            await asyncio.sleep(delay)
+        except HTTPStatusError as e:
+            # HTTPステータスエラーが発生した場合は、エラーメッセージを表示して、Noneを返す
+            error("HTTP Error:", f"{e}", {"Mode":"Post","URL": URL,"Request Data":request_kwargs,"Request Count":retries})
+            retries += 1
+            await asyncio.sleep(delay)
+        except Exception as e:
+            # 上記以外のエラーが発生した場合は、エラーメッセージを表示して、Noneを返す
+            error("An error occurred:", f"{e}", {"Mode":"Post","URL": URL,"Request Data":request_kwargs,"Request Count":retries})
+            retries += 1
+            await asyncio.sleep(delay)
+    return None
 
 # 非同期関数としてデータをGETするための関数
-async def get_data_from_server(URL):
+async def get_data_from_server(URL, max_retries=3, delay=1):
     """
     非同期的に指定されたURLからデータを取得する関数。
 
+    Parameters:
+    - URL: データを取得するURL。
+    - max_retries: 最大再問合せ回数。
+    - delay: 再問合せの間隔（秒）。
+
     Returns:
     - dict or None: 成功時にはレスポンスのJSONデータを返し、失敗時にはNoneを返す。
     """
+    retries = 0
 
-    # httpxの非同期クライアントを使用して非同期的なリクエストを行う
-    async with httpx.AsyncClient() as client:
-        
-        # BASE_URLに設定されたURLに対して、'/custom/get_data/A'のエンドポイントでデータをGETする
-        response = await client.get(URL)
+    while retries < max_retries:
+        try:
+            # httpxの非同期クライアントを使用して非同期的なリクエストを行う
+            async with httpx.AsyncClient() as client:
+                response = await client.get(URL)
+                # レスポンスのステータスコードが200（成功）の場合
+                response.raise_for_status()
+                # レスポンスのJSONデータを返す
+                return response.json()
 
-        # レスポンスのステータスコードが200（成功）の場合
-        if response.status_code == 200:
-            # レスポンスのJSONデータを返す
-            return response.json()
-        else:
-            # ステータスコードが200以外の場合はエラーメッセージを表示して、Noneを返す
-            error("FastAPI_Error", "Failed to get data.", {"Status Code": response.status_code, "URL": URL})
-            return None
+        except ConnectError as e:
+            # 接続エラーが発生した場合は、エラーメッセージを表示して、Noneを返す
+            error("Connection Error:", f"{e}", {"Mode":"Get","URL": URL,"Request Count":retries})
+            retries += 1
+            await asyncio.sleep(delay)
+        except HTTPStatusError as e:
+            # HTTPステータスエラーが発生した場合は、エラーメッセージを表示して、Noneを返す
+            error("HTTP Error:", f"{e}", {"Mode":"Get","URL": URL,"Request Count":retries})
+            retries += 1
+            await asyncio.sleep(delay)
+        except Exception as e:
+            # 上記以外のエラーが発生した場合は、エラーメッセージを表示して、Noneを返す
+            error("An error occurred:", f"{e}", {"Mode":"Get","URL": URL,"Request Count":retries})
+            retries += 1
+            await asyncio.sleep(delay)
+    print(f"All {max_retries} connection attempts failed.")
+    return None
 
 # GPTにリクエストするための非同期関数
-async def request_GPT(ID, prompt_name, user_prompt, variables, stream):
+async def request_GPT(ID, prompt_name, user_assistant_prompt=None, variables=None, stream=False):
     """
     非同期的にGPTにリクエストを送る関数。
 
@@ -131,13 +170,14 @@ async def request_GPT(ID, prompt_name, user_prompt, variables, stream):
     """
     
     # リクエストデータの構築
-    data = {
-        "user_assistant_prompt": user_prompt,
-        "variables": variables
-    }
+    request_data = {}
+    if user_assistant_prompt != None:
+        request_data['user_assistant_prompt'] = user_assistant_prompt
+    elif variables != None:
+        request_data['variables'] = variables
 
     # オプションのクエリパラメータの構築
-    params = {
+    request_params = {
         "stream": stream  # TrueまたはFalse
     }
 
@@ -147,9 +187,6 @@ async def request_GPT(ID, prompt_name, user_prompt, variables, stream):
     # httpxの非同期クライアントを使用して、60秒のタイムアウトを持つ非同期リクエストを行う
     async with httpx.AsyncClient(timeout=60.0) as client:
         response = await client.post(request_URL, json=data, params=params)
-        
-        # 改行文字の置換（実際の置換内容が同じなので、このコードは冗長である可能性がある）
-        print_responce = response.text.replace('\n', '\n')
         
         # 以下のコメントアウトされたprint文は、リクエストの結果をコンソールに表示するためのもの
         # print(f"Request_GPT < ID:{ID} > \nmessage:{print_responce}\njson:{data}\n")
@@ -306,13 +343,13 @@ async def record_to_text(model):
             result_data = await result_queue.get()
             for key, value in result_data.items():
                 if key == 'whisper_text':
-                    await post_data_from_server([value],f"{AI_Tuber_URL}/mic_recorded_list/post/")
+                    await post_data_from_server(post_data=[value],URL=f"{AI_Tuber_URL}/mic_recorded_list/post/")
             #print(f"結果: {result_data}")
             
         #関数を更新
         recording_swicth = await get_data_from_server(f"{AI_Tuber_URL}/mic_recording_bool/get/")
-        whisper().change_recording_state(speechToText_bool)
-        await asyncio.sleep(0.5)
+        whisper().change_recording_state(recording_swicth)
+        await asyncio.sleep(0)
 
 def process1():
     #Whisper modelの準備
@@ -321,21 +358,27 @@ def process1():
     print("Done.")
     asyncio.run(record_to_text(model))
 
-def process2():
-    return
+async def Mirai_15_model():
+    mirai_prompt_name = 'みらいV1.5'
+    while True:
+        mirai_prompt_data = await get_data_from_server(f"{GPT_Mangaer_URL}/prompts-get/lookup_prompt_by_name?prompt_name={mirai_prompt_name}")
+        mirai_prompt_variables = mirai_prompt_data[0]['variables']
+            
+
+def process2_function():
+    asyncio.run(Mirai_15_model())
 
 if __name__ == "__main__":
-    
-    #multiprocessing用関数宣言
-    #result_queue = multiprocessing.Queue()
+    asyncio.run(Mirai_15_model())
+    exit()
 
     #multiprocessing用プロセス作成
-    process1 = multiprocessing.Process(target=process1, args=())
-    process2 = multiprocessing.Process(target=process2)
+    process1 = multiprocessing.Process(target=process1)
+    process2 = multiprocessing.Process(target=process2_function)
 
     #multiprocessingプロセス開始
     process1.start()
     process2.start()
 
-    process1.join()
+    #process1.join()
     process2.join()
