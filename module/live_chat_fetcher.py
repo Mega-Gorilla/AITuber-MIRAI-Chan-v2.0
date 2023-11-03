@@ -50,22 +50,25 @@ def create_pychat(URL):# ビデオIDを抽出
     chat = pytchat.create(video_id=video_id)
     return chat
 
-async def youtube_liveChat_fetch(URL=None,chat=None,last_comment_id=None,interval_s = 5):
+async def youtube_liveChat_fetch(URL=None,chat=None):
     if chat is None:
         chat = create_pychat(url)
     try:
         # 新しいコメントを取得
         new_comments = get_new_comments(chat)
+        
+        return new_comments
         # ロギング（ここでは単にプリントしていますが、ファイルに保存するなどが可能です）
-        for comment in new_comments:
-            print(f"{comment['name']}: {comment['comment']}")
 
-    except KeyboardInterrupt:
+    except Exception as e:
+        error("Live Chat Fetch Error:", f"{e}", {"URL":URL,"Chat":chat})
         print("Stopped.")
 
 async def loop_test(chat,interval_s=5):
     while True:
-        await youtube_liveChat_fetch(chat=chat)
+        new_comments = await youtube_liveChat_fetch(chat=chat)
+        for comment in new_comments:
+            print(f"{comment['name']}: {comment['comment']}")
         await asyncio.sleep(interval_s)
 
 
