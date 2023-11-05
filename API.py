@@ -2,7 +2,6 @@
 from module.live_chat_fetcher import create_pychat,youtube_liveChat_fetch,youtube_viewer_count
 from module.find_similar import AnswerFinder
 from fastapi import FastAPI,BackgroundTasks
-from pydantic import BaseModel, Field
 from typing import List, Any
 import asyncio
 import os
@@ -32,17 +31,17 @@ class AnswerFinder_settings:
     finder = None
     start = False
 
-@app.post("/mic_recording_bool/post/", tags=["Mic Settings"])
+@app.post("/mic_mute/post/", tags=["Mic Settings"])
 def mic_post_item(mic_recodiong: bool = False):
     """
     マイクの音声認識 ON/OFF:
-    - True : ON
-    - False : OFF
+    - True : OFF
+    - False : ON
     """
     mic_setting.mic_recording_bool = mic_recodiong
     return mic_recodiong
 
-@app.get("/mic_recording_bool/get/", tags=["Mic Settings"])
+@app.get("/mic_mute/get/", tags=["Mic Settings"])
 def mic_get_item():
     """
     マイクの音声認識 状態確認
@@ -83,7 +82,7 @@ def similar_dialogue_get(str_dialogue:str,top_n:int = 3):
         result = [{'ok':False,'message':'類似会話検索エンジンが初期化されていません'}]
     return result
 
-@app.post("/similar_dialogue/start/", tags=["AI Tuber"])
+@app.get("/similar_dialogue/start/", tags=["AI Tuber"])
 def similar_dialogue_start(background_tasks: BackgroundTasks):
     """
     類似会話検索エンジンを初期化します。
