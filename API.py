@@ -32,14 +32,14 @@ class AnswerFinder_settings:
     start = False
 
 @app.post("/mic_mute/post/", tags=["Mic Settings"])
-def mic_post_item(mic_recodiong: bool = False):
+def mic_post_item(mic_mute: bool = False):
     """
     マイクの音声認識 ON/OFF:
     - True : OFF
     - False : ON
     """
-    mic_setting.mic_recording_bool = mic_recodiong
-    return mic_recodiong
+    mic_setting.mic_recording_bool = mic_mute
+    return mic_mute
 
 @app.get("/mic_mute/get/", tags=["Mic Settings"])
 def mic_get_item():
