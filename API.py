@@ -1,12 +1,13 @@
 
 from module.live_chat_fetcher import create_pychat,youtube_liveChat_fetch,youtube_viewer_count
+from module.find_similar import AnswerFinder
 from fastapi import FastAPI,BackgroundTasks
 from pydantic import BaseModel, Field
 from typing import List, Any
 import asyncio
 import os
 
-app = FastAPI(title='AI Tuber API',version='β1.0')
+app = FastAPI(title='AI Tuber API',version='β1.1')
 
 #将来的にDBに移行
 Youtube_comments = []
@@ -25,6 +26,12 @@ class AI_Tuber_setting:
     interval_s:int = 3
     youtube_api_key = os.getenv("GOOGLE_API_KEY")
 
+class AnswerFinder_settings:
+    csv_directory = 'memory/example_tone'
+    persist_directory = 'memory/ChromaDB'
+    finder = None
+    start = False
+
 @app.post("/mic_recording_bool/post/", tags=["Mic Settings"])
 def mic_post_item(mic_recodiong: bool = False):
     """
@@ -42,7 +49,7 @@ def mic_get_item():
     """
     return mic_setting.mic_recording_bool
 
-@app.post("/AI_talk_bool/post/")
+@app.post("/AI_talk_bool/post/", tags=["AI Tuber"])
 def AI_talk_post_item(AI_talk: bool = False):
     """
     AI Tuber 発声プロセス開始
@@ -51,12 +58,43 @@ def AI_talk_post_item(AI_talk: bool = False):
     AI_Tuber_setting.AI_talk_bool = AI_talk
     return AI_talk
 
-@app.get("/AI_talk_bool/get/")
+@app.get("/AI_talk_bool/get/", tags=["AI Tuber"])
 def AI_talk_get_item():
     """
     AI Tuber 発声プロセス状態確認
     """
     return AI_Tuber_setting.AI_talk_bool
+
+@app.get("/similar_dialogue/get/", tags=["AI Tuber"])
+def similar_dialogue_get(str_dialogue:str,top_n:int = 3):
+    """
+    類似会話を検索し、結果を返します
+    
+    パラメータ:
+    str_dialogue: 検索する文字列
+
+    戻り値:
+    - レスポンス例 {'text':こんにちわ,'score'"0.22}
+    """
+    if AnswerFinder_settings.start:
+        result = AnswerFinder_settings.finder.find_similar_vector_store(str_dialogue,top_n)
+        result.append({'ok':True})
+    else:
+        result = [{'ok':False,'message':'類似会話検索エンジンが初期化されていません'}]
+    return result
+
+@app.post("/similar_dialogue/start/", tags=["AI Tuber"])
+def similar_dialogue_start(background_tasks: BackgroundTasks):
+    """
+    類似会話検索エンジンを初期化します。
+    検索方式はsimilarity searchです。
+
+    注意:
+    - 会話例データ: {AnswerFinder_settings.csv_directory}に検索対象のデータが入っている必要があります。
+    - Chroma DB: 作成したデータベースは、{AnswerFinder_settings.persist_directory}に保存されます。
+    """
+    background_tasks.add_task(create_or_load_chroma_db_background)
+    return {'ok':True,'message':'similar_dialogue Start.'}
 
 @app.post("/mic_recorded_list/post/", tags=["Mic Settings"])
 def mic_recorded_dict_post(recorded_list: List[Any]):
@@ -82,10 +120,15 @@ def mic_recorded_dict_get(reset: bool = False):
 def set_stream_url(url:str):
     """
     Youtubeコメント取得先URLを設定
+
+    パラメータ:
     - url YoutubeURLを設定する
+
+    戻り値:
+    - {'ok':True,"message": url}
     """
     AI_Tuber_setting.youtube_URL = url
-    return {"message": url}
+    return {'ok':True,"message": url}
 
 @app.get("/youtube_api/get_stream_url/", tags=["Youtube API"])
 def get_stream_url():
@@ -172,7 +215,14 @@ async def youtube_chat_fetch():
         if new_comments != []:
             AI_Tuber_setting.live_comment_list.append(new_comments[0])
         await asyncio.sleep(AI_Tuber_setting.interval_s)
+
+async def create_or_load_chroma_db_background():
+    AnswerFinder_settings.start = False
+    AnswerFinder_settings.finder = AnswerFinder()
+    AnswerFinder_settings.finder.create_or_load_chroma_db(AnswerFinder_settings.csv_directory,AnswerFinder_settings.persist_directory)
+    AnswerFinder_settings.start = True
         
 if __name__ == "__main__":
+    #uvicorn API:app --reload   
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    uvicorn.run("API:app", host="0.0.0.0", port=8001,reload=True)
