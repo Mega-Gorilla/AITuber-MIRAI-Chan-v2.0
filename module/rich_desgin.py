@@ -48,6 +48,8 @@ def error(title,message,Environment_Information=None):
             for key, value in Environment_Information.items():
                 console.print(f'       {key}: {value}', style="yellow")
 
+def warning_message(message):
+    console.print(f"WARNING: {message}", style="bold yellow")
 
 if __name__ == '__main__':
     message = """An error occurred: HelloLambdaFunction - Resource handler returned message: "Value nodejs12.xa at 'runtime' failed to satisfy constraint: Member must satisfy enum value set: [nodejs12.x, python3.6, provided, nodejs14.x, ruby2.7, java11, go1.x, provided.al2, java8, java8.al2, dotnetcore3.1, python3.7, python3.8] or be a valid ARN"""
