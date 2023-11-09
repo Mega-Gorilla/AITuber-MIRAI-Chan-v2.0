@@ -1,5 +1,5 @@
 
-from module.live_chat_fetcher import create_pychat,youtube_liveChat_fetch,youtube_viewer_count
+from module.live_chat_fetcher import *
 from module.find_similar import AnswerFinder
 from fastapi import FastAPI,BackgroundTasks
 from typing import List, Any
@@ -22,8 +22,10 @@ class AI_Tuber_setting:
     live_comment_fetch:bool = False
     live_comment_list = []
     youtube_URL:str = ""
+    youtube_channel_id:str = ""
     interval_s:int = 3
     youtube_api_key = os.getenv("GOOGLE_API_KEY")
+    program_fin = False
 
 class AnswerFinder_settings:
     csv_directory = 'memory/example_tone'
@@ -39,7 +41,7 @@ def mic_post_item(mic_mute: bool = False):
     - False : ON
     """
     mic_setting.mic_recording_bool = mic_mute
-    return mic_mute
+    return mic_setting.mic_recording_bool
 
 @app.get("/mic_mute/get/", tags=["Mic Settings"])
 def mic_get_item():
@@ -95,6 +97,22 @@ def similar_dialogue_start(background_tasks: BackgroundTasks):
     background_tasks.add_task(create_or_load_chroma_db_background)
     return {'ok':True,'message':'similar_dialogue Start.'}
 
+@app.post("/Program_Fin_bool/post/", tags=["AI Tuber"])
+def Program_Fin_post_item(Program_Fin: bool = False):
+    """
+    プログラムを終了する
+    - True : プログラムを終了させます
+    """
+    AI_Tuber_setting.program_fin = Program_Fin
+    return AI_Tuber_setting.program_fin
+
+@app.get("/Program_Fin_bool/get/", tags=["AI Tuber"])
+def Program_Fin_get_item():
+    """
+    プログラム終了関数を取得
+    """
+    return AI_Tuber_setting.program_fin
+
 @app.post("/mic_recorded_list/post/", tags=["Mic Settings"])
 def mic_recorded_dict_post(recorded_list: List[Any]):
     """
@@ -127,7 +145,8 @@ def set_stream_url(url:str):
     - {'ok':True,"message": url}
     """
     AI_Tuber_setting.youtube_URL = url
-    return {'ok':True,"message": url}
+    AI_Tuber_setting.youtube_channel_id = get_channel_id(url,AI_Tuber_setting.youtube_api_key)
+    return {'ok':True,"message": f"URL:{url} / Channel_ID:{AI_Tuber_setting.youtube_channel_id}"}
 
 @app.get("/youtube_api/get_stream_url/", tags=["Youtube API"])
 def get_stream_url():
@@ -200,12 +219,26 @@ def youtube_liveChat_get(reset: bool = False):
     return chatlist
 
 @app.get("/youtube_api/viewer_count/", tags=["Youtube API"])
-async def youtube_liveChat_get():
+async def youtube_viewer_count_get():
     """
     配信の視聴者数を表示する
     """
-    count = await youtube_viewer_count(AI_Tuber_setting.youtube_URL,AI_Tuber_setting.youtube_api_key)
-    return count
+    if AI_Tuber_setting.youtube_URL != "":
+        count = await youtube_viewer_count(AI_Tuber_setting.youtube_URL,AI_Tuber_setting.youtube_api_key)
+        return count
+    else:
+        return {'ok':False,"message": "Stream URL is None"}
+
+@app.get("/youtube_api/subscriber_count/", tags=["Youtube API"])
+async def youtube_subscriber_count_get():
+    """
+    チャンネル登録者数を取得する
+    """
+    if AI_Tuber_setting.youtube_channel_id != "":
+        count = await youtube_subscriber_count(AI_Tuber_setting.youtube_channel_id,AI_Tuber_setting.youtube_api_key)
+        return count
+    else:
+        return {'ok':False,"message": "Stream URL is None"}
 
 async def youtube_chat_fetch():
     chat = create_pychat(AI_Tuber_setting.youtube_URL)
