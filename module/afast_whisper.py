@@ -4,11 +4,11 @@ import pyaudio
 from collections import deque
 from faster_whisper import WhisperModel
 import wave
-import requests
+import asyncio
+import aiohttp
 
 class AudioProcessor:
     def __init__(self):
-        self.URL = "http://127.0.0.1:8001"
         self.pa = pyaudio.PyAudio()
         self.rate = 48000
         self.channels = 2
@@ -24,19 +24,20 @@ class AudioProcessor:
         self.audio_buffer = deque(maxlen=self.rate * 30 * self.channels * 2 // self.frames_per_buffer)
         self.model = WhisperModel("large-v2", device="cuda")
     
-    def process_stream(self):
+    async def process_stream(self):
         print("Mic Start")
-        while True:
-            try:
-                audio_data = self.stream.read(self.frames_per_buffer, exception_on_overflow=False)
-                self.audio_buffer.append(audio_data)
-                response = requests.get(f"{self.URL}/mic_mute/get/")
-                if response.text.lower() == 'true':
+        async with aiohttp.ClientSession() as session:
+            while True:
+                try:
+                    audio_data = self.stream.read(self.frames_per_buffer, exception_on_overflow=False)
+                    self.audio_buffer.append(audio_data)
+                    async with session.get("http://127.0.0.1:8001/mic_mute/get/") as response:
+                        mute_status = await response.text()
+                        if mute_status.lower() == 'true':
+                            break
+                except KeyboardInterrupt:
+                    print("処理を中断します。")
                     break
-           
-            except KeyboardInterrupt:
-                print("処理を中断します。")
-                break
     
     def save_buffer_to_file(self, file_path):
         # バッファ内の全データを結合
@@ -66,31 +67,21 @@ class AudioProcessor:
     
     def transcribe(self,audio_wav):
         segments, info = self.model.transcribe(audio_wav, beam_size=5, language='ja')
-        segment_data = []
-        if list[segments] == []:
-            segment_data = ["He is keeping his mouth shut."]
-        else:
-            for segment in segments:
-                print("\033[92m{}\033[0m".format(segment.text))
-                segment_data.append(segment.text)
-        response = requests.post(
-            f'{self.URL}/mic_recorded_list/post/',
-            json=segment_data
-        )
+        for segment in segments:
+            print("\033[92m{}\033[0m".format(segment.text))
 
     def close(self):
         self.stream.stop_stream()
         self.stream.close()
         self.pa.terminate()
 
-if __name__ == "__main__":
-    # 使用例
-    audio_processor = AudioProcessor()
-    try:
-        audio_processor.process_stream()
-    finally:
-        print('mic end.')
-        # 終了時にバッファをファイルに保存
-        audio_processor.save_buffer_to_file('output.wav')
-        audio_processor.transcribe('output.wav')
-        audio_processor.close()
+# 使用例
+audio_processor = AudioProcessor()
+loop = asyncio.get_event_loop()
+try:
+    loop.run_until_complete(audio_processor.process_stream())
+finally:
+    print('mic end.')
+    audio_processor.save_buffer_to_file('output.wav')
+    audio_processor.transcribe('output.wav')
+    audio_processor.close()
