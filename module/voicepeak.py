@@ -15,10 +15,10 @@ async def GnenereteVoiceData(script,
     任意のテキストからVoicePeak音声を生成保存します。この動作には5sから10sほどかかります。
     script: 読み上げるテキスト（文字列）
     narrator: ナレーターの名前（文字列）
-    livid: ブチ切れの度合い
-    lamenting: 嘆きの度合い
-    despising: 蔑みの度合い
-    narration: 楽しさの度合い
+    livid: ブチ切れの度合い (0%-100%)
+    lamenting: 嘆きの度合い (0%-100%)
+    despising: 蔑みの度合い (0%-100%)
+    narration: 楽しさの度合い (0%-100%)
     """
     # 現在の実行しているファイルのパスを取得
     current_dir = saveCurrent_dir
