@@ -1,12 +1,15 @@
 
-from module.rich_desgin import error
 from rich import print
 import asyncio
 import httpx
 from httpx import ConnectError, HTTPStatusError
+try:
+    from module.rich_desgin import error
+except ImportError:
+    from rich_desgin import error
 
 # 非同期関数としてデータをPOSTするための関数
-async def post_data_from_server(URL,post_data,post_params=None,max_retries=3, delay=1, timeout=60.0):
+async def post_data_from_server(URL,post_data=None,post_params=None,max_retries=3, delay=1, timeout=60.0):
     """
     非同期的にデータを指定されたURLにPOSTする関数。
     Parameters:
@@ -28,11 +31,12 @@ async def post_data_from_server(URL,post_data,post_params=None,max_retries=3, de
                 'url':URL
             }
             # データを適切な形式でリクエストに追加
-            if isinstance(post_data, (dict, list)):  # post_dataが辞書型またはリスト型の場合
-                request_kwargs["json"] = post_data
-            else:  # それ以外の場合、生のデータとして扱う
-                request_kwargs["data"] = post_data
-            # クエリパラメータをリクエストに追加
+            if post_data != None:
+                if isinstance(post_data, (dict, list)):  # post_dataが辞書型またはリスト型の場合
+                    request_kwargs["json"] = post_data
+                else:  # それ以外の場合、生のデータとして扱う
+                    request_kwargs["data"] = post_data
+                # クエリパラメータをリクエストに追加
             if post_params is not None:
                 request_kwargs["params"] = post_params
             # httpxの非同期クライアントを使用して非同期的なリクエストを行う
