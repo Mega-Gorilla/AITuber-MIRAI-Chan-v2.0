@@ -5,6 +5,7 @@ from collections import deque
 from faster_whisper import WhisperModel
 import wave
 import requests
+import time
 
 class AudioProcessor:
     def __init__(self):
@@ -23,7 +24,32 @@ class AudioProcessor:
         )
         self.audio_buffer = deque(maxlen=self.rate * 30 * self.channels * 2 // self.frames_per_buffer)
         self.model = WhisperModel("large-v2", device="cuda")
-    
+
+    def play_wav_file(self, file_path):
+        # WAVファイルを開く
+        wf = wave.open(file_path, 'rb')
+
+        # 再生用のストリームを開く
+        stream = self.pa.open(
+            format=self.pa.get_format_from_width(wf.getsampwidth()),
+            channels=wf.getnchannels(),
+            rate=wf.getframerate(),
+            output=True
+        )
+
+        # ファイルからデータチャンクを読み込み、再生する
+        data = wf.readframes(self.frames_per_buffer)
+        while data:
+            stream.write(data)
+            data = wf.readframes(self.frames_per_buffer)
+
+        # ストリームを閉じる
+        stream.stop_stream()
+        stream.close()
+
+        # ファイルを閉じる
+        wf.close()
+
     def process_stream(self):
         print("Mic Start")
         while True:
@@ -83,14 +109,35 @@ class AudioProcessor:
         self.stream.close()
         self.pa.terminate()
 
+    def stop(self):
+        self.stream.stop_stream()
+    def start(self):
+        self.stream.start_stream()
+
+    def reset(self):
+        self.audio_buffer = deque(maxlen=self.rate * 30 * self.channels * 2 // self.frames_per_buffer)
+
 if __name__ == "__main__":
-    # 使用例
     audio_processor = AudioProcessor()
     try:
-        audio_processor.process_stream()
+        while requests.get(f"{audio_processor.URL}/Program_Fin_bool/get/").text.lower() == 'false':
+            response = requests.get(f"{audio_processor.URL}/mic_mute/get/")
+            if response.text.lower() == 'false':
+                audio_processor.process_stream()
+                # process_stream()が正常に終了したら、バッファをファイルに保存し、書き起こしを行う
+                print('mic end.')
+                audio_processor.stop()
+                audio_processor.save_buffer_to_file('output.wav')
+                audio_processor.reset()
+                audio_processor.start()
+                audio_processor.transcribe('output.wav')
+                audio_processor.play_wav_file('output.wav')
+            else:
+                time.sleep(1)
+            
+    except Exception as e:
+        # ここでエラーを処理する
+        print(f"予期せぬエラーが発生しました: {e}")
     finally:
-        print('mic end.')
-        # 終了時にバッファをファイルに保存
-        audio_processor.save_buffer_to_file('output.wav')
-        audio_processor.transcribe('output.wav')
+        # 終了時に必ずリソースをクリーンアップ
         audio_processor.close()
