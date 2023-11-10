@@ -6,7 +6,7 @@ from typing import List, Any
 import asyncio
 import os
 
-app = FastAPI(title='AI Tuber API',version='β1.1')
+app = FastAPI(title='AI Tuber API',version='β1.3')
 
 #将来的にDBに移行
 Youtube_comments = []
@@ -19,12 +19,7 @@ class record_data:
 
 class AI_Tuber_setting:
     AI_talk_bool:bool = False
-    live_comment_fetch:bool = False
-    live_comment_list = []
-    youtube_URL:str = ""
-    youtube_channel_id:str = ""
     interval_s:int = 3
-    youtube_api_key = os.getenv("GOOGLE_API_KEY")
     program_fin = False
 
 class AnswerFinder_settings:
@@ -32,6 +27,15 @@ class AnswerFinder_settings:
     persist_directory = 'memory/ChromaDB'
     finder = None
     start = False
+class Youtube_API_settings:
+    youtube_api_key = os.getenv("GOOGLE_API_KEY")
+    live_comment_fetch:bool = False
+    live_comment_list = []
+    youtube_URL:str = ""
+    youtube_VideoID:str = ""
+    youtube_channel_id:str = ""
+    youtube_last_comment:dict = {}
+    
 
 @app.post("/mic_mute/post/", tags=["Mic Settings"])
 def mic_post_item(mic_mute: bool = False):
@@ -134,7 +138,7 @@ def mic_recorded_dict_get(reset: bool = False):
     return responce_data
 
 @app.post("/youtube_api/set_stream_url/", tags=["Youtube API"])
-def set_stream_url(url:str):
+def set_stream_url(url:str,background_tasks: BackgroundTasks):
     """
     Youtubeコメント取得先URLを設定
 
@@ -144,35 +148,40 @@ def set_stream_url(url:str):
     戻り値:
     - {'ok':True,"message": url}
     """
-    AI_Tuber_setting.youtube_URL = url
-    AI_Tuber_setting.youtube_channel_id = get_channel_id(url,AI_Tuber_setting.youtube_api_key)
-    return {'ok':True,"message": f"URL:{url} / Channel_ID:{AI_Tuber_setting.youtube_channel_id}"}
+    Youtube_API_settings.youtube_URL = url
+    Youtube_API_settings.youtube_VideoID = extract_video_id(url)
+    Youtube_API_settings.youtube_channel_id = get_channel_id(url,Youtube_API_settings.youtube_api_key)
+    return {'ok':True,"message": f"URL:{url} / Channel_ID:{Youtube_API_settings.youtube_channel_id}"}
 
 @app.get("/youtube_api/get_stream_url/", tags=["Youtube API"])
 def get_stream_url():
     """
     Youtubeコメント取得先URLを取得
     """
-    return AI_Tuber_setting.youtube_URL
+    return Youtube_API_settings.youtube_URL
 
 @app.post("/youtube_api/chat_fetch/sw/", tags=["Youtube API"])
-def youtube_liveChat_fetch_sw(chat_fecth_sw: bool,background_tasks: BackgroundTasks):
+def youtube_liveChat_fetch_sw(chat_fecth_sw: bool=False):
     """
     Youtubeコメントの取得をON_OFFします
     - True : ON
     - False : OFF
     - 事前に'/youtube_api/set_stream_url'を実行し、コメント取得する配信のURLを設定する必要があります。
     """
-    if AI_Tuber_setting.youtube_URL == "":
+    if Youtube_API_settings.youtube_URL == "":
         return {'ok':False,"message": "Stream URL is None"}
     if chat_fecth_sw:
-        if AI_Tuber_setting.live_comment_fetch:
+        if Youtube_API_settings.live_comment_fetch:
             return {'ok':True,"message": "Task is already."}
-        AI_Tuber_setting.live_comment_fetch = True
-        background_tasks.add_task(youtube_chat_fetch)
+        Youtube_API_settings.live_comment_fetch = True
+
+        #最後のコメントを取得しておく
+        comment_list = get_new_comments(Youtube_API_settings.youtube_VideoID,Youtube_API_settings.youtube_api_key)
+        Youtube_API_settings.youtube_last_comment = comment_list[-1]
+
         return {'ok':True,"message": "Task started"}
     else:
-        AI_Tuber_setting.live_comment_fetch = False
+        Youtube_API_settings.live_comment_fetch = False
         return {'ok':True,"message": "Task will stop shortly."}
     
 @app.get("/youtube_api/chat_fetch/sw-get/", tags=["Youtube API"])
@@ -180,25 +189,10 @@ def youtube_liveChat_fetch_sw_get():
     """
     Youtubeコメント取得のON OFF状態を取得
     """
-    return AI_Tuber_setting.live_comment_fetch
-
-@app.post("/youtube_api/chat_fetch/post/", tags=["Youtube API"])
-def youtube_liveChat_post(comments: dict = {'name': "", 'comment': '','timestamp':None,'superchat_bool':False,'superchat_value':0.0,'superchat_currency':''}):
-    """
-    配信コメントリストに手動で配列を追加する
-
-    - 'name' (str): コメントの著者の名前。
-    - 'comment' (str): コメントのテキスト。
-    - 'timestamp' (int): コメントが投稿されたタイムスタンプ。
-    - 'superchat_bool' (bool): コメントがスーパーチャットであるかどうか。
-    - 'superchat_value' (float): スーパーチャットの金額。
-    - 'superchat_currency' (str): スーパーチャットの通貨。
-    """
-    AI_Tuber_setting.live_comment_list.append(comments)
-    return comments
+    return Youtube_API_settings.live_comment_fetch
 
 @app.get("/youtube_api/chat_fetch/get/", tags=["Youtube API"])
-def youtube_liveChat_get(reset: bool = False):
+def youtube_liveChat_get():
     """
     配信コメントを配列で取得する
 
@@ -213,18 +207,32 @@ def youtube_liveChat_get(reset: bool = False):
     - 'superchat_value' (float): スーパーチャットの金額。
     - 'superchat_currency' (str): スーパーチャットの通貨。
     """
-    chatlist = AI_Tuber_setting.live_comment_list
-    if reset:
-        AI_Tuber_setting.live_comment_list = []
-    return chatlist
+    if Youtube_API_settings.live_comment_fetch == False:
+        return {'ok':False,'message':'Chat FetchがONになっていません。'}
+    
+    chatlist = get_new_comments(Youtube_API_settings.youtube_VideoID,Youtube_API_settings.youtube_api_key)
+    matching_data_and_after = []
+    found_match = False
+    if chatlist != []:
+        for d in chatlist:
+            if found_match:
+                # 一致した後のデータをリストに追加
+                matching_data_and_after.append(d)
+            elif d == Youtube_API_settings.youtube_last_comment:
+                # 一致するデータを見つけたらフラグを立て、リストに追加
+                found_match = True
+        if matching_data_and_after == []:
+            matching_data_and_after = chatlist
+    Youtube_API_settings.youtube_last_comment = chatlist[-1]
+    return matching_data_and_after
 
 @app.get("/youtube_api/viewer_count/", tags=["Youtube API"])
 async def youtube_viewer_count_get():
     """
     配信の視聴者数を表示する
     """
-    if AI_Tuber_setting.youtube_URL != "":
-        count = await youtube_viewer_count(AI_Tuber_setting.youtube_URL,AI_Tuber_setting.youtube_api_key)
+    if Youtube_API_settings.youtube_URL != "":
+        count = await youtube_viewer_count(Youtube_API_settings.youtube_URL,Youtube_API_settings.youtube_api_key)
         return count
     else:
         return {'ok':False,"message": "Stream URL is None"}
@@ -234,19 +242,11 @@ async def youtube_subscriber_count_get():
     """
     チャンネル登録者数を取得する
     """
-    if AI_Tuber_setting.youtube_channel_id != "":
-        count = await youtube_subscriber_count(AI_Tuber_setting.youtube_channel_id,AI_Tuber_setting.youtube_api_key)
+    if Youtube_API_settings.youtube_channel_id != "":
+        count = await youtube_subscriber_count(Youtube_API_settings.youtube_channel_id,Youtube_API_settings.youtube_api_key)
         return count
     else:
         return {'ok':False,"message": "Stream URL is None"}
-
-async def youtube_chat_fetch():
-    chat = create_pychat(AI_Tuber_setting.youtube_URL)
-    while AI_Tuber_setting.live_comment_fetch:
-        new_comments = await youtube_liveChat_fetch(chat=chat)
-        if new_comments != []:
-            AI_Tuber_setting.live_comment_list.append(new_comments[0])
-        await asyncio.sleep(AI_Tuber_setting.interval_s)
 
 async def create_or_load_chroma_db_background():
     AnswerFinder_settings.start = False
