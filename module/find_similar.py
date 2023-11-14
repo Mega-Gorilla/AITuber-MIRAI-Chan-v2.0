@@ -19,8 +19,7 @@ class AnswerFinder:
         self.tfidf_matrix = None
         self.tokenizer = Tokenizer()
         self.remove_words = ['、', '。', ' ','　','…']
-        self.db = None
-    
+
     def create_or_load_chroma_db(self, csv_directory, persist_directory):
         if self._is_new_csv_exists(csv_directory) or self.is_directory_empty(persist_directory):
             #新規DBの作成
@@ -33,12 +32,14 @@ class AnswerFinder:
                 chunk_overlap=0  # チャンクオーバーラップのトークン数
             )
             documents = csv_loader.load_and_split(text_splitter=text_splitter)
-            self.db = Chroma.from_documents(documents,
+            db = Chroma.from_documents(documents,
                                     OpenAIEmbeddings(),
                                     persist_directory = persist_directory)
+            return db
         else:
             # load from disk
-            self.db = Chroma(persist_directory=persist_directory, embedding_function=OpenAIEmbeddings())
+            db = Chroma(persist_directory=persist_directory, embedding_function=OpenAIEmbeddings())
+            return db
         
     def create_or_load_tf_idf_model(self, csv_directory, vetor_model_path):
         if self._is_new_csv_exists(csv_directory) or not os.path.isfile(vetor_model_path):
@@ -147,11 +148,11 @@ class AnswerFinder:
         best_answer_indices = cosine_similarities.argsort()[-top_n:][::-1]
         return [{'text': self.csv_list[i], 'score': cosine_similarities[i]} for i in best_answer_indices]
      
-    def find_similar_vector_store(self, question, top_n=3):
+    def find_similar_vector_store(self, db,question, top_n=3):
         #探索モードはsimilarity search
         #retriver = self.db.as_retriever(search_kwargs={"k": top_n})
         #return retriver.get_relevant_documents(question)
-        raw_result =  self.db.similarity_search_with_score(query=question, k=top_n)
+        raw_result =  db.similarity_search_with_score(query=question, k=top_n)
         return [{'text': doc.page_content, 'score': score} for doc, score in raw_result]
     
     def tokenize(self, text):
@@ -160,14 +161,14 @@ class AnswerFinder:
 if __name__ == '__main__':
     finder = AnswerFinder()
     pp = pprint.PrettyPrinter(indent=2)
-    finder.create_or_load_chroma_db(csv_directory='memory/example_tone', persist_directory='memory/ChromaDB')
+    tone_db=finder.create_or_load_chroma_db(csv_directory='memory/example_tone', persist_directory='memory/ChromaDB')
     finder.create_or_load_tf_idf_model(csv_directory='memory/example_tone', vetor_model_path='memory/tf-idf_model.pkl')
     while True:
         print("endにて終了")
         serch_word = input("検索ワードを入力してください:")
         if serch_word == 'end':
             break
-        results = finder.find_similar_vector_store(serch_word,3)
+        results = finder.find_similar_vector_store(tone_db,serch_word,3)
         print('[Vector Store]')
         pp.pprint(results)
         results = finder.find_similar_tfidf(serch_word,3)
