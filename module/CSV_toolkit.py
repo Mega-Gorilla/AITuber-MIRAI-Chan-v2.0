@@ -53,6 +53,7 @@ def extract_and_write_columns(input_csv_path, column_indices, output_csv_path):
 def csv_to_dict_array(input_csv_path, key_col_index, value_col_index):
     """
     CSVファイルを読み込み、指定された列をキーと値として辞書配列に変換する。
+    最初の行（通常はヘッダー）は無視される。
 
     :param input_csv_path: 読み込みCSVファイルのパス
     :param key_col_index: キーとして使用する列のインデックス
@@ -63,6 +64,7 @@ def csv_to_dict_array(input_csv_path, key_col_index, value_col_index):
 
     with open(input_csv_path, mode='r', encoding='utf-8', newline='') as infile:
         reader = csv.reader(infile)
+        next(reader, None)  # 最初の行（ヘッダー）をスキップする
         for row in reader:
             key = row[key_col_index]
             value = row[value_col_index]
