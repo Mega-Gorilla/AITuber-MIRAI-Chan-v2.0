@@ -147,13 +147,31 @@ class AnswerFinder:
         cosine_similarities = linear_kernel(question_vector, self.tfidf_matrix).flatten()
         best_answer_indices = cosine_similarities.argsort()[-top_n:][::-1]
         return [{'text': self.csv_list[i], 'score': cosine_similarities[i]} for i in best_answer_indices]
-     
+    
+    def remove_duplicates(self,dict_list):
+        """
+        辞書のリストから、'text'キーの値が重複する辞書を除去する。
+
+        :param dict_list: 辞書のリスト
+        :return: 重複の除去されたリスト
+        """
+        seen_texts = set()
+        new_list = []
+
+        for item in dict_list:
+            if item['text'] not in seen_texts:
+                new_list.append(item)
+                seen_texts.add(item['text'])
+
+        return new_list
+
     def find_similar_vector_store(self, db,question, top_n=3):
         #探索モードはsimilarity search
         #retriver = self.db.as_retriever(search_kwargs={"k": top_n})
         #return retriver.get_relevant_documents(question)
         raw_result =  db.similarity_search_with_score(query=question, k=top_n)
-        return [{'text': doc.page_content, 'score': score} for doc, score in raw_result]
+        result = [{'text': doc.page_content, 'score': score} for doc, score in raw_result]
+        return self.remove_duplicates(result)
     
     def tokenize(self, text):
         return [token.surface for token in self.tokenizer.tokenize(text)]
