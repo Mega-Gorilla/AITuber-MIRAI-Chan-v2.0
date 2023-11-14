@@ -21,6 +21,10 @@ async def atranslate_text(deepl_key,text, target_language='JA',source_language='
     async with aiohttp.ClientSession() as session:
         async with session.post(endpoint, data=params) as response:
             # レスポンスをJSONとして解析
+            if response.status != 200:
+                response_body = await response.text()
+                print(f"Deepl Error response: {response_body}")
+                return None
             result = await response.json()
             return result['translations'][0]['text']
 
