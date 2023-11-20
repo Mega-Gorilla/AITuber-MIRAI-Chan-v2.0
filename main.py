@@ -2,6 +2,8 @@
 from module.rich_desgin import error,warning_message
 from module.server_requests import *
 from module.fast_whisper import *
+from module.deepl import atranslate_text
+from module.voicevox import *
 from rich import print
 from rich.console import Console
 import multiprocessing
@@ -9,7 +11,7 @@ import time
 import asyncio
 import os
 import json
-import aiohttp
+import random
 
 class config:
     #keys
@@ -26,42 +28,49 @@ class config:
     GPT_Mangaer_URL = "http://127.0.0.1:8000"
     AI_Tuber_URL = "http://127.0.0.1:8001"
 
+    #コメント参照個数
     comment_num = 5
+
+    #類似検索個数
     tone_example_top_n = 4
+    motion_list_top_n = 5
 
     #みらい1.5 プロンプト
-    Avator_Name = "未来 アイリ"
-    collaborator_name = "猩々 博士"
+    mirai_prompt_name = 'みらいV1.6'
     talk_logs = []
-    stream_summary = ""
+    talk_log_temp = []
+    summary = ""
+    stream_summary = "None"
     viewer_count = 0
     subscriber_count = 0
+
+    #監督　プロンプト
+    charactor_list = """未来 アイリ
+猩々 博士"""
+    facial_expressions_list = """NEUTRAL (This is the default expression)
+Joy
+Angry
+Fun"""
+    director_list = []
+
+    #VoiceVox
+    voicevox_name = 'AIRI'
+    speaker_uuid = "9f3ee141-26ad-437e-97bd-d22298d02ad2"
+    style_id = 20
+    voicevox_save_path = 'voice_data'
+
     stream = False
     requestList = {}
 
     summary_limit_token = 4000 #このトークン値を超えたら要約されます。
     total_token = 0
 
+    AI_gesture_emotion_state_list = []
+    VoiceVox_list = []
+    motion_list = []
+    translatedict = {}
+
 console = Console()
-
-async def translate_text(text, target_language,source_language='EN'):
-    
-    endpoint = 'https://api-free.deepl.com/v2/translate'
-
-    # 翻訳リクエストのパラメータ
-    params = {
-        'auth_key': config.Deepl_API_key,
-        'text': text,
-        'target_lang': target_language,
-        'source_lang': source_language
-    }
-
-    # aiohttp.ClientSessionを使用してリクエストを非同期で実行
-    async with aiohttp.ClientSession() as session:
-        async with session.post(endpoint, data=params) as response:
-            # レスポンスをJSONとして解析
-            result = await response.json()
-            return result['translations'][0]['text']
         
 async def youtube_counter_initialize():
     viewer_count = await get_youtube_viewer_counts()
@@ -121,12 +130,15 @@ def process1_function():
                 speech_to_text.start()
 
                 speech_to_text.transcribe('output.wav')
+                speech_to_text.close()
                 audio_repeat = True
                 requests.post(f"{config.AI_Tuber_URL}/AI_talk_bool/post/?AI_talk=true")
             else:
                 if audio_repeat:
                     speech_to_text.play_wav_file('output.wav')
                     audio_repeat = False
+                if os.path.isfile(config.voicevox_save_path) and config.voicevox_save_path.endswith('.wav'):
+                    pass
                 time.sleep(1)
     except Exception as e:
         # ここでエラーを処理する
@@ -136,8 +148,14 @@ def process1_function():
 
 async def Mirai_15_model():
     # 会話検索エンジンの初期化
-    await get_data_from_server(f"{config.AI_Tuber_URL}/similar_dialogue/start/")
-    await get_data_from_server(URL=f"{config.GPT_Mangaer_URL}/openai/get/?reset=true")
+    print("初期化中...")
+    print(await get_data_from_server(f"{config.AI_Tuber_URL}/tone_similar/start/")) #類似検索を初期化
+    await asyncio.sleep(0)
+    print(await get_data_from_server(f"{config.AI_Tuber_URL}/motion_similar/start/")) #類似検索を初期化
+    await get_data_from_server(URL=f"{config.GPT_Mangaer_URL}/openai/get/?reset=true") #OpneAIの回答履歴を消去
+    Add_preset(1,config.voicevox_name,config.speaker_uuid,config.style_id) #ViceVoxの初期化
+    stream = audio_stream_start()
+    print("初期化完了")
 
     # YoutubeAPIが設定されているか確認
     commnet_url = await get_data_from_server(f"{config.AI_Tuber_URL}/youtube_api/get_stream_url/")
@@ -149,7 +167,7 @@ async def Mirai_15_model():
         await post_data_from_server(f"{config.AI_Tuber_URL}/youtube_api/chat_fetch/sw/?chat_fecth_sw=true")
     
     while await get_data_from_server(f"{config.AI_Tuber_URL}/Program_Fin_bool/get/") == False:
-        mirai_prompt_name = 'みらいV1.5'
+        mirai_prompt_name = config.mirai_prompt_name
         mirai_talkSW = await get_data_from_server(f"{config.AI_Tuber_URL}/AI_talk_bool/get/") 
 
         if mirai_talkSW:
@@ -187,7 +205,7 @@ async def Mirai_15_model():
 
             #類似会話例を取得
             serch_tone_word = mic_recorded_str.split('\n')[0]
-            streamer_tone_dict = await get_data_from_server(f"{config.AI_Tuber_URL}/similar_dialogue/get/?str_dialogue={serch_tone_word}&top_n={config.tone_example_top_n}")
+            streamer_tone_dict = await get_data_from_server(f"{config.AI_Tuber_URL}/tone_similar/get/?str_dialogue={serch_tone_word}&top_n={config.tone_example_top_n}")
             streamer_tone = ''
             for d in streamer_tone_dict:
                 if 'ok' in d:
@@ -205,8 +223,6 @@ async def Mirai_15_model():
                 talk_log = talk_log.rstrip('\n')
 
             mirai_prompt_variables = {
-                "Avator_Name": config.Avator_Name,
-                "collaborator_name": config.collaborator_name,
                 "example_tone": streamer_tone,
                 "stream_summary": config.stream_summary,
                 "talk_logs": talk_log,
@@ -223,62 +239,212 @@ async def Mirai_15_model():
             #リクエスト追加
             config.requestList = {mirai_prompt_name:{"variables" : mirai_prompt_variables}}
             await post_data_from_server(URL=f"{config.GPT_Mangaer_URL}/openai/request/?prompt_name={mirai_prompt_name}&stream_mode={stream_mode}",post_data={"variables" : mirai_prompt_variables})
+
         else:
             #GPTのデータを受信
             requests = await get_data_from_server(URL=f"{config.GPT_Mangaer_URL}/openai/get/?reset=true")
             message_list = []
-            translate_dir = {}
-            emotion_statements_list = []
             usage_data={}
             # GPTレスポンスデータを取得する
             if requests != []:
                 for request_data in requests:
                     try:
                         if 'choices' in request_data:
-                            #データを取得し、辞書配列に変換する
-                            message_list.append(json.loads(request_data["choices"][0]['message']['content']))
+                            #OPENAI よりデータが返された時
+                            request_id = request_data['request_id']
+                            print(f"OpenAIからの応答: {request_id}\n{request_data['choices'][0]}\n")
+                            if request_id == config.mirai_prompt_name:
+                                #GPT3.5で辞書配列に変換する
+                                content = request_data['choices'][0]['message']['content']
+                                content = '\n'.join(line for line in content.split('\n') if 'RESPONSE FORMAT:' not in line)
+
+                                config.requestList = {"mirai1.6ToDict":{"variables" : {"contents":content}}}
+                                await post_data_from_server(URL=f"{config.GPT_Mangaer_URL}/openai/request/?prompt_name=mirai1.6ToDict&stream_mode=false",post_data={"variables": {"contents":content}})
+                            elif request_id == "talk_logTosummary":
+                                #要約が送信された場合
+                                content = request_data['choices'][0]['message']['content']
+                                config.summary = content
+                                #会話データより要約済みデータを消去
+                                [item for item in config.talk_logs if item not in config.talk_log_temp]
+                                print(f"要約が実施されました。\n{content}")
+
+                            else:
+                                #データを取得し、辞書配列に変換する
+                                dict_data = json.loads(request_data["choices"][0]['message']['content'])
+                                #データにプロンプト名を追加
+                                if isinstance(dict_data, dict):
+                                    dict_data["request_id"] = request_data['request_id']
+                                elif isinstance(dict_data, list):
+                                    dict_data.insert(0,{"request_id":request_data['request_id']})
+                                message_list.append(dict_data)
+                                
+                            #コスト追加
                             usage_data[request_data['request_id']] = request_data['usage']['total_tokens']
                             config.total_token += request_data['usage']['total_tokens']
                         else:
                             prompt_name = request_data['request_id']
-                            print(f"問題のある投稿が行われました。{prompt_name}を再リクエストします")
-                            print(request_data)
+                            error("OpenAIサーバー問合せ時に問題が発生しました。",request_data['choices'][0]['message'],{"RequestID":request_data['request_id'],"request_data":request_data})
+                            print(f"{prompt_name}を再リクエストします。")
                             await post_data_from_server(URL=f"{config.GPT_Mangaer_URL}/openai/request/?prompt_name={prompt_name}&stream_mode=false",post_data=config.requestList[prompt_name])
                     except Exception as e:
-                        print('Add JOB: [str to Json]')
-                        await post_data_from_server(URL=f"{config.GPT_Mangaer_URL}/openai/request/?prompt_name=str to Json&stream_mode=false",post_data={"variables":{"str_data":request_data["choices"][0]['message']['content']}})
+                        print(f'問い合わせにエラーが発生しています。\n')
+                        prompt_name = request_data['request_id']
+                        error("OpenAIの応答データを辞書配列に変換できませんでした。",f"{prompt_name} の変換に失敗",{"RequestID":request_data['request_id'],"request_data":request_data})
+                        await post_data_from_server(URL=f"{config.GPT_Mangaer_URL}/openai/request/?prompt_name={prompt_name}&stream_mode=false",post_data=config.requestList[prompt_name])
+
             
             #要約を実施する
             if usage_data!={}:
-                if usage_data['みらいV1.5'] > config.summary_limit_token:
-                    print("\033[31mプロンプト長さが規定値を超えました.\033[0m")
-                    pass
+                print(f"Usage Data: {usage_data}")
+                if usage_data.get(config.mirai_prompt_name, 0) > config.summary_limit_token:
+                    print("\033[31mプロンプト長さが規定値を超えました. 要約を実施します。\033[0m")
+                    #一時保存
+                    config.talk_log_temp = config.talk_logs
+                    for d in config.talk_logs:
+                        key, value = list(d.items())[0]
+                        talk_log += f"{key} -> {value}\n"
+                    talk_log = talk_log.rstrip('\n')
+                    old_summary = config.summary
+                    await post_data_from_server(URL=f"{config.GPT_Mangaer_URL}/openai/request/?prompt_name=talk_logTosummary&stream_mode=false",post_data={"variables": {"talk_log":talk_log,"old_talk_log":old_summary}})
 
-            #結果を表示する
-            if message_list != []:
+            #LLMの結果より処理を決定する
+            if message_list != []: 
                 print("\n------------------Result Data------------------")
                 for item in message_list:
-                    #音声データが来た場合の対処
-                    if 'Result' in item: 
-                        emotion_statements_list = item['Result'] #会話データ＋感情データを配列で取得
-                        for talk_data in item['Result']: #会話データを取得しlogに挿入する
-                            #{'emotion': 'Amused and intrigued', 'statements': '会話データ'}
-                            append_data = talk_data['statements']
-                            print_data = f"未来 アイリ -> {append_data}"
-                            print("\033[92m"+{print_data}+"\033[0m")
-                            config.talk_logs.append({"未来 アイリ":append_data})
-                        
-                        #翻訳文を追加
-                        translate_dir["コラボ相手の活動内容"] = item["Summary of Collaborator's Activities"]
-                        translate_dir["視聴者からのフィードバック"] = item["Summary of Viewer Feedback Analysis"]
-                        translate_dir['エンゲージメントを上昇させるためには？'] = item['Summary of Strategies for Engagement']
+                    #print(f"message_list: {item}")
+                    if isinstance(item, dict):
+                        #みらい1.6の結果が返ってきた際の処理
+                        if item['request_id'] == "mirai1.6ToDict": 
+                            config.AI_gesture_emotion_state_list = item['Result'] #会話データ＋感情データを配列で取得
+                            
+                            #翻訳文を追加
+                            config.translatedict["コラボ相手の活動内容"] = item["Summary of Collaborator's Activities"]
+                            config.translatedict["視聴者からのフィードバック"] = item["Summary of Viewer Feedback Analysis"]
+                            config.translatedict['エンゲージメントを上昇させるためには？'] = item['Summary of Strategies for Engagement']
+                    elif isinstance(item, list):
+                        if item[0]['request_id']=="statementsToVoiceVoxparameter":
+                            #VoiceVox向けパラメータがある場合、
+                            config.VoiceVox_list = item
+                        if item[0]['request_id']=="Statement_to_animMotion":
+                            config.motion_list = item
+                    else:
+                        print(f'分からないデータ: {item}')
                     #print(f"{item}")
 
-                #翻訳する
-                if translate_dir != {}:
-                    for key,value in translate_dir.items():
-                        translate_str = await translate_text(value,'JA')
-                        print(f"{key}: {translate_str}")
+            # アイリの会話文があるとき
+            if config.AI_gesture_emotion_state_list != []:
+                talk_log = config.talk_logs
+                statement_to_motion_prompt = ""
+                statement_to_voiceTone_prompt = ""
+                gesture_dict ={}
+                gesture_list = []
+                anim_list=""
+                #talklogの作成
+                talk_log = ""
+                if config.talk_logs != []:
+                    for d in config.talk_logs:
+                        key, value = list(d.items())[0]
+                        talk_log += f"{key} -> {value}\n"
+                    talk_log = talk_log.rstrip('\n')
+
+                for item in config.AI_gesture_emotion_state_list:
+                    #会話データの追加
+                    try:
+                        statement_str = item['statements'].replace("未来 アイリ: ", "")
+                        emotion_str = item['emotion']
+                        gesture_str = item['gesture']
+                    except Exception as e:
+                        error("mirai1.6ToDictが正しく辞書配列に変換できませんでした。",item,{"mirai1.6ToDict Data":item})
+                        await post_data_from_server(URL=f"{config.GPT_Mangaer_URL}/openai/request/?prompt_name=mirai1.6ToDict&stream_mode=false",post_data=config.requestList["mirai1.6ToDict"])
+                        break
+                    print(f"未来 アイリ -> {statement_str}")
+
+                    statement_to_voiceTone_prompt += f"{statement_str}[{emotion_str}]\n"
+                    statement_to_motion_prompt += f"{statement_str}[{gesture_str}]"
+                    gesture_list.append(gesture_str)
+
+                    # メモリーに追加
+                    config.talk_logs.append({"未来 アイリ":statement_str})
+                
+                #VoiceTone問合せ実施
+                if statement_to_voiceTone_prompt != "":
+                    config.requestList = {"statementsToVoiceVoxparameter":{"variables" : {"talk_data":statement_to_voiceTone_prompt}}}
+                    await post_data_from_server(URL=f"{config.GPT_Mangaer_URL}/openai/request/?prompt_name=statementsToVoiceVoxparameter&stream_mode=false",post_data={"variables": {"talk_data":statement_to_voiceTone_prompt}})
+
+                    #ジェスチャー類似検索実施
+                    for item in gesture_list:
+                        #ジェスチャーの類似検索実施
+                        gesture_similar_dict = await get_data_from_server(f"{config.AI_Tuber_URL}/motion_similar/get/?str_dialogue={item}&top_n={config.motion_list_top_n}")
+                        for item in gesture_similar_dict:
+                            if 'name' in item and 'text' in item:
+                                gesture_dict[item['name']]=item['text']
+                    #animlistの個数が不足している場合ランダムで追加する
+                    if len(gesture_similar_dict) <= 10:
+                        gesture_list = await get_data_from_server(f"{config.AI_Tuber_URL}/Unity/animation/list/get")
+                        add_list = random.sample(gesture_list,10-len(gesture_similar_dict))
+                        for anim in add_list:
+                            gesture_dict.update(anim)
+                    #anim_listを作成する
+                    for key,value in gesture_dict.items():
+                        anim_list+=f"{key} : {value}\n"
+                    #Motionの問い合わせ実施
+                    config.requestList = {"Statement_to_animMotion":{"variables" : {"talk_data":statement_to_motion_prompt,"anim_list":anim_list}}}
+                    await post_data_from_server(URL=f"{config.GPT_Mangaer_URL}/openai/request/?prompt_name=Statement_to_animMotion&stream_mode=false",post_data={"variables": {"talk_data":statement_to_motion_prompt,"anim_list":anim_list}})
+                    
+                #会話データをリセットする
+                config.AI_gesture_emotion_state_list = []
+            
+            #データがそろった際読み上げ実施する
+            if config.motion_list!= [] and config.VoiceVox_list!= []:
+                print(f"motionList: {config.motion_list}\nVoiceVoxList: {config.VoiceVox_list}")
+                new_list = []
+                VoiceVoxList = config.VoiceVox_list
+                motionList = config.motion_list
+
+                # VoiceVoxListからテキストと声のトーンを取得し、motionListからアニメーション情報を取得して組み合わせる
+                for voice_item, motion_item in zip(VoiceVoxList[1:], motionList[1:]):
+                    # テキストとアニメーションキーを取得
+                    text = list(voice_item.values())[0]
+                    anim_key = list(motion_item.keys())[0]
+                    print(f"text: {text}\nanim_key: {anim_key}")
+
+                    # 新しい形式でデータを追加
+                    new_list.append({
+                        "text": text,
+                        "voice_tone": voice_item['voice_tone'],
+                        "Expression": voice_item['Expression'],
+                        "anim": motion_item[anim_key]
+                    })
+                
+                print(f"\nResult List: {new_list}")
+                #アニメーション実施
+                i = 0
+                for items in new_list:
+                    text = items['text']
+                    voice_tone = items['voice_tone']
+                    Expression = items['Expression']
+                    anim = items['anim']
+                    unity_post_data = {"VRM_expression": Expression,
+                                       "VRM_animation": anim}
+                    update_preset(1,config.voicevox_name,config.speaker_uuid,config.style_id,voice_tone['Speaking_Speed']*0.01,(voice_tone['Voice_Pitch']-100)*0.01,voice_tone['Voice_Intonation']*0.01)
+                    stream = audio_stream_start()
+                    #text_to_wavefile(text,file_path=f"{config.voicevox_save_path}\AI_audio_{i}.wav",preset_id=1,speaker=config.style_id)
+                    audio_data = text_to_wave(text,preset_id=1,speaker=config.style_id)
+                    await post_data_from_server(URL=f"{config.AI_Tuber_URL}/Unity/animation/post/",post_data=unity_post_data)
+                    stream.write(audio_data)
+                    audio_stream_stop(stream)
+                    i += 1
+
+                config.motion_list = []
+                config.VoiceVox_list = []
+            
+            #翻訳する
+            if config.translatedict != {}:
+                print()
+                for key,value in config.translatedict.items():
+                    translate_str = await atranslate_text(config.Deepl_API_key,value)
+                    print(f"{key}: {translate_str}")
+                config.translatedict = {}
                 print("------------------ END ------------------")
             await asyncio.sleep(1)
 
