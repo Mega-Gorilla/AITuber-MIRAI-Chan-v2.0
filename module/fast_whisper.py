@@ -15,13 +15,7 @@ class AudioProcessor:
         self.channels = 2
         self.sample_format = pyaudio.paInt16
         self.frames_per_buffer = 2048
-        self.stream = self.pa.open(
-            format=self.sample_format,
-            channels=self.channels,
-            rate=self.rate,
-            input=True,
-            frames_per_buffer=self.frames_per_buffer
-        )
+        self.stream = None
         self.audio_buffer = deque(maxlen=self.rate * 30 * self.channels * 2 // self.frames_per_buffer)
         self.model = WhisperModel("large-v2", device="cuda")
 
@@ -52,6 +46,14 @@ class AudioProcessor:
 
     def process_stream(self):
         print("Mic Start")
+        self.pa = pyaudio.PyAudio()
+        self.stream = self.pa.open(
+            format=self.sample_format,
+            channels=self.channels,
+            rate=self.rate,
+            input=True,
+            frames_per_buffer=self.frames_per_buffer
+        )
         while True:
             try:
                 audio_data = self.stream.read(self.frames_per_buffer, exception_on_overflow=False)
@@ -117,6 +119,7 @@ class AudioProcessor:
     def reset(self):
         self.audio_buffer = deque(maxlen=self.rate * 30 * self.channels * 2 // self.frames_per_buffer)
 
+
 if __name__ == "__main__":
     audio_processor = AudioProcessor()
     try:
@@ -132,6 +135,7 @@ if __name__ == "__main__":
                 audio_processor.start()
                 audio_processor.transcribe('output.wav')
                 audio_processor.play_wav_file('output.wav')
+                audio_processor.close()
             else:
                 time.sleep(1)
             
