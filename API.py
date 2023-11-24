@@ -2,8 +2,10 @@
 from module.live_chat_fetcher import *
 from module.find_similar import AnswerFinder
 from module.CSV_toolkit import csv_to_dict_array
-from fastapi import FastAPI,BackgroundTasks
+from module.EasyOCR import *
+from fastapi import FastAPI,BackgroundTasks,HTTPException
 from typing import List, Any
+from pydantic import BaseModel
 import asyncio
 import os
 
@@ -47,6 +49,14 @@ class Youtube_API_settings:
 class unity_data:
     animation_dict = {}
     unity_logs = []
+
+class ocr:
+    reader = None
+
+class OCRResult(BaseModel):
+    coordinates: List[List[int]]
+    text: str
+    confidence: float
 
 @app.post("/mic_mute/post/", tags=["Mic Settings"])
 def mic_post_item(mic_mute: bool = False):
@@ -391,6 +401,36 @@ def get_Unity_Logs(reset: bool = False):
     if reset:
         unity_data.unity_logs = []
     return responce
+
+@app.get("/OCR/start/",tags=["OCR"])
+def ocr_start():
+    """
+    EasyOCRを初期化します
+    """
+    ocr.reader=easyocr_render_reset()
+    return {'ok':True}
+
+@app.post("/OCR/scan/",tags=["OCR"])
+def ocr_scan(app_name: str,capture_size: List[int],save_image: bool = False,white_black_filter:bool=True):
+    """
+    OCR スキャンを行います
+    
+    パラメータ:
+    - app_name: アプリケーション画面名を設定する。
+    - capture_size: スキャンする画面座標を指定します。例:[800, 1550, 3000, 2000]
+    - save_image: スキャンした画像を保存するかを設定します。
+    - white_black_fliter: 白以外の色のをすべて黒色に塗りつぶすフィルターをON/OFFします。
+    """
+    if ocr.reader == None:
+        raise HTTPException(status_code=400, detail="Invalid ocr. Please initialize OCR.")
+    if len(capture_size) != 4:
+        raise HTTPException(status_code=400, detail="Invalid capture size. List must contain exactly 3 elements.")
+    screenshot = take_screenshot_of_window(app_name,tuple(capture_size),white_black_filter,save_image)
+    if screenshot is None:
+        raise HTTPException(status_code=400, detail="Could not obtain the specified application name.")
+    raw_data = read_ocr(ocr.reader,screenshot)
+    results = [OCRResult(coordinates=coords, text=text, confidence=conf) for coords, text, conf in raw_data]
+    return results
 
 def create_or_load_chroma_db_background(csv_directory,persist_directory):
     AnswerFinder_settings.start = False
