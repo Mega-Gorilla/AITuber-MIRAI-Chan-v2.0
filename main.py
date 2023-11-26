@@ -4,6 +4,7 @@ from module.server_requests import *
 from module.fast_whisper import *
 from module.deepl import atranslate_text
 from module.voicevox import *
+from module.GPTResponce_to_dict import *
 from rich import print
 from rich.console import Console
 import multiprocessing
@@ -29,18 +30,17 @@ class config:
     AI_Tuber_URL = "http://127.0.0.1:8001"
 
     #コメント参照個数
-    comment_num = 5
+    comment_num = 4
 
     #類似検索個数
-    tone_example_top_n = 4
+    tone_example_top_n = 3
     motion_list_top_n = 5
 
     #みらい1.5 プロンプト
     mirai_prompt_name = 'みらいV1.6'
     talk_logs = []
     talk_log_temp = []
-    summary = ""
-    stream_summary = "None"
+    summary = "None"
     viewer_count = 0
     subscriber_count = 0
 
@@ -62,7 +62,7 @@ Fun"""
     stream = False
     requestList = {}
 
-    summary_limit_token = 4000 #このトークン値を超えたら要約されます。
+    summary_limit_token = 3000 #このトークン値を超えたら要約されます。
     total_token = 0
 
     AI_gesture_emotion_state_list = []
@@ -133,6 +133,7 @@ def process1_function():
                 speech_to_text.close()
                 audio_repeat = True
                 requests.post(f"{config.AI_Tuber_URL}/AI_talk_bool/post/?AI_talk=true")
+            
             else:
                 if audio_repeat:
                     speech_to_text.play_wav_file('output.wav')
@@ -140,6 +141,7 @@ def process1_function():
                 if os.path.isfile(config.voicevox_save_path) and config.voicevox_save_path.endswith('.wav'):
                     pass
                 time.sleep(1)
+            
     except Exception as e:
         # ここでエラーを処理する
         print(f"予期せぬエラーが発生しました: {e}")
@@ -224,7 +226,7 @@ async def Mirai_15_model():
 
             mirai_prompt_variables = {
                 "example_tone": streamer_tone,
-                "stream_summary": config.stream_summary,
+                "stream_summary": config.summary,
                 "talk_logs": talk_log,
                 "subscribers_num": subscriber_count,
                 "viewers_num": viewer_count,
@@ -253,14 +255,7 @@ async def Mirai_15_model():
                             #OPENAI よりデータが返された時
                             request_id = request_data['request_id']
                             print(f"OpenAIからの応答: {request_id}\n{request_data['choices'][0]}\n")
-                            if request_id == config.mirai_prompt_name:
-                                #GPT3.5で辞書配列に変換する
-                                content = request_data['choices'][0]['message']['content']
-                                content = '\n'.join(line for line in content.split('\n') if 'RESPONSE FORMAT:' not in line)
-
-                                config.requestList = {"mirai1.6ToDict":{"variables" : {"contents":content}}}
-                                await post_data_from_server(URL=f"{config.GPT_Mangaer_URL}/openai/request/?prompt_name=mirai1.6ToDict&stream_mode=false",post_data={"variables": {"contents":content}})
-                            elif request_id == "talk_logTosummary":
+                            if request_id == "talk_logTosummary":
                                 #要約が送信された場合
                                 content = request_data['choices'][0]['message']['content']
                                 config.summary = content
@@ -269,7 +264,7 @@ async def Mirai_15_model():
                                 print(f"要約が実施されました。\n{content}")
 
                             else:
-                                #データを取得し、辞書配列に変換する
+                                #OpenAIレスポンスを辞書配列に変換する
                                 dict_data = json.loads(request_data["choices"][0]['message']['content'])
                                 #データにプロンプト名を追加
                                 if isinstance(dict_data, dict):
@@ -281,6 +276,7 @@ async def Mirai_15_model():
                             #コスト追加
                             usage_data[request_data['request_id']] = request_data['usage']['total_tokens']
                             config.total_token += request_data['usage']['total_tokens']
+                            print(f"Total Cost: {config.total_token}")
                         else:
                             prompt_name = request_data['request_id']
                             error("OpenAIサーバー問合せ時に問題が発生しました。",request_data['choices'][0]['message'],{"RequestID":request_data['request_id'],"request_data":request_data})
@@ -291,7 +287,6 @@ async def Mirai_15_model():
                         prompt_name = request_data['request_id']
                         error("OpenAIの応答データを辞書配列に変換できませんでした。",f"{prompt_name} の変換に失敗",{"RequestID":request_data['request_id'],"request_data":request_data})
                         await post_data_from_server(URL=f"{config.GPT_Mangaer_URL}/openai/request/?prompt_name={prompt_name}&stream_mode=false",post_data=config.requestList[prompt_name])
-
             
             #要約を実施する
             if usage_data!={}:
@@ -314,13 +309,12 @@ async def Mirai_15_model():
                     #print(f"message_list: {item}")
                     if isinstance(item, dict):
                         #みらい1.6の結果が返ってきた際の処理
-                        if item['request_id'] == "mirai1.6ToDict": 
+                        if item['request_id'] == config.mirai_prompt_name: 
                             config.AI_gesture_emotion_state_list = item['Result'] #会話データ＋感情データを配列で取得
                             
                             #翻訳文を追加
-                            config.translatedict["コラボ相手の活動内容"] = item["Summary of Collaborator's Activities"]
-                            config.translatedict["視聴者からのフィードバック"] = item["Summary of Viewer Feedback Analysis"]
-                            config.translatedict['エンゲージメントを上昇させるためには？'] = item['Summary of Strategies for Engagement']
+                            filtered_data = {k: v for k, v in item.items() if k not in ['Result', 'request_id']}
+                            config.translatedict.update(filtered_data)
                     elif isinstance(item, list):
                         if item[0]['request_id']=="statementsToVoiceVoxparameter":
                             #VoiceVox向けパラメータがある場合、
