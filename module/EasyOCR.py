@@ -47,8 +47,12 @@ def take_screenshot_of_window(window_title, crop_area=None, white_pixels_black=F
 
 
 def easyocr_render_reset(langages=['ja','en'],gpu=True):
-    render = easyocr.Reader(langages, gpu=True, detector='dbnet18')
+    render = easyocr.Reader(langages, gpu=gpu, detector='dbnet18')
     return render
+
+def read_ocr(reader,screenshot):
+    results = reader.readtext(screenshot)
+    return results
 
 def Doki_Doki_Literature_Club_Get_str(reader,debug=False):
     screenshot = take_screenshot_of_window("Doki Doki Literature Club!", (800, 1550, 3000, 2000),True,False)
