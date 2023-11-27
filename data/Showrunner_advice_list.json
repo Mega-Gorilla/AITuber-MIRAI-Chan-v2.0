@@ -1,0 +1,11 @@
+{
+    "tsukkomi_mode":"Ignoring recent viewer comments, let's do a 'ツッコミ' (Tsukkomi) in the style of Japanese comedy with 猩々 博士, based on our conversation logs!",
+    "boke_mode":"Ignoring recent viewer comments, let's deliver a 'ボケ' (Boke) in the style of Japanese Manzai comedy to 猩々 博士, based on our conversation logs!",
+    "Insult":"Let's ignore the recent viewer comments and insult 猩々 博士!",
+    "Comment":"Let's set aside 猩々 博士 for now and, while looking at the recent viewer comments, respond to the viewers' comments!",
+    "opnion":"Ignoring the recent viewer comments, let's express our opinion to 猩々 博士 as AI 未来 アイリ, based on the conversation logs with him.",
+    "gameChara_opnion":"Ignoring the recent viewer comments, please express your opinions and thoughts about the game character based on the conversation log data of the game character.",
+    "Stream_start":"The stream has started! Let's greet all the viewers!",
+    "Stream_end":"The stream is coming to an end. After reflecting on the stream so far, let's express our gratitude to those who have watched. And don't forget to ask all the viewers to subscribe to the channel and leave a high rating!",
+    "emotionally":"Based on the previous conversation logs, please make an emotionally impactful statement that will move the viewers."
+}
