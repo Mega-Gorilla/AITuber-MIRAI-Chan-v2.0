@@ -8,6 +8,7 @@ from typing import List, Any
 from pydantic import BaseModel
 import asyncio
 import os
+import json
 
 app = FastAPI(title='AI Tuber API',version='β1.5')
 
@@ -24,6 +25,7 @@ class AI_Tuber_setting:
     AI_talk_bool:bool = False
     interval_s:int = 3
     program_fin = False
+    Showrunner_advice_prompt_name = ""
 
 class AnswerFinder_settings:
     tone_csv_directory = 'memory/example_tone'
@@ -58,6 +60,11 @@ class OCRResult(BaseModel):
     text: str
     confidence: float
 
+class game_data:
+    Game_info_path = "data/game_info"
+    Game_info = ""
+    Game_talkLog= []
+
 @app.post("/mic_mute/post/", tags=["Mic Settings"])
 def mic_post_item(mic_mute: bool = False):
     """
@@ -90,6 +97,48 @@ def AI_talk_get_item():
     AI Tuber 発声プロセス状態確認
     """
     return AI_Tuber_setting.AI_talk_bool
+
+@app.get("/Showrunner_Advice_list/get/", tags=["AI Tuber"])
+def Showrunner_advice_get():
+    """
+    Showrunner_advice プロンプトのリストを取得する
+    """
+    try:
+        with open('data/showrunner_advice_list.json', 'r', encoding='utf-8') as file:
+            return json.load(file)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="[data/showrunner_advice_list.json] not found.")
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=404, detail="Error decoding JSON.")
+
+@app.post("/Showrunner_Advice/post/", tags=["AI Tuber"])
+def Showrunner_advice_post(prompt_name:str="",mic_end: bool =False):
+    """
+    Showrunner_advice プロンプトを内容を取得する
+    - prompt_name: 内容を取得するプロンプト名を設定する
+    - 注意:最後に呼び出されたプロンプト名は記憶され、prompt_name=""で参照された際、最後に呼び出されたプロンプト内容を返します
+
+    - mic_end: プロンプト内容取得後、マイク聞き取りを終了する場合はTrueに設定してください
+    """
+    if prompt_name == "":
+        if AI_Tuber_setting.Showrunner_advice_prompt_name !="":
+            prompt_name = AI_Tuber_setting.Showrunner_advice_prompt_name
+        else:
+            raise HTTPException(status_code=403, detail="Prompt_name Error")
+    else:
+        AI_Tuber_setting.Showrunner_advice_prompt_name = prompt_name
+    
+    if mic_end:
+        mic_setting.mic_recording_bool = True
+    
+    try:
+        with open('data/showrunner_advice_list.json', 'r', encoding='utf-8') as file:
+            data = json.load(file)
+            return data.get(prompt_name)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="File not found.")
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=404, detail="Error decoding JSON.")
 
 @app.get("/tone_similar/get/", tags=["Vector Store"])
 def tone_similar_get(str_dialogue:str,top_n:int = 3):
@@ -402,7 +451,7 @@ def get_Unity_Logs(reset: bool = False):
         unity_data.unity_logs = []
     return responce
 
-@app.get("/OCR/start/",tags=["OCR"])
+@app.get("/EasyOCR/start/",tags=["OCR"])
 def ocr_start():
     """
     EasyOCRを初期化します
@@ -410,7 +459,7 @@ def ocr_start():
     ocr.reader=easyocr_render_reset()
     return {'ok':True}
 
-@app.post("/OCR/scan/",tags=["OCR"])
+@app.post("/EasyOCR/scan/",tags=["OCR"])
 def ocr_scan(app_name: str,capture_size: List[int],save_image: bool = False,white_black_filter:bool=True):
     """
     OCR スキャンを行います
@@ -431,6 +480,63 @@ def ocr_scan(app_name: str,capture_size: List[int],save_image: bool = False,whit
     raw_data = read_ocr(ocr.reader,screenshot)
     results = [OCRResult(coordinates=coords, text=text, confidence=conf) for coords, text, conf in raw_data]
     return results
+
+@app.post("/EasyOCR/scan/Doki_Doki_Literature_Club/",tags=["OCR"])
+def Doki_Doki_Literature_Club_ocr(debug: bool = False):
+    """
+    OCR スキャンを行います。このスキャンは、Doki Doki Literature Clubに対応しています。
+    OCR結果を返します。スキャンしたOCR結果は、game_data.Game_talkLogに記録されます。
+
+    パラメータ:
+    - debug
+    """
+    if ocr.reader == None:
+        raise HTTPException(status_code=400, detail="Invalid ocr. Please initialize OCR.")
+    text_data = Doki_Doki_Literature_Club_Get_str(ocr.reader,debug)
+    if text_data is None:
+        raise HTTPException(status_code=400, detail="Could not obtain the specified application name.")
+    if text_data["text"] != "":
+        game_data.Game_talkLog.append(text_data)
+        return text_data
+    else:
+        return None
+
+@app.get("/GameData/talk_log/get",tags=["Game Data"])
+def get_game_talk_log(reset:bool = True):
+    """
+    ゲームトークログを取得します
+    """
+    return_data = game_data.Game_talkLog
+    if reset:
+        game_data.Game_talkLog = ""
+    return return_data
+
+@app.get("/GameData/GameInfo/get",tags=["Game Data"])
+def get_game_info(game_name: str):
+    """
+    data/game_infoにあるtxtファイルデータを取得して返します。
+    """
+    texts = {}
+    text_files_found = False
+    folder_path = game_data.Game_info_path
+    filename = game_name
+
+    # フォルダが存在するかチェック
+    if not os.path.exists(folder_path):
+        raise HTTPException(status_code=404, detail="Folder Not found.")
+
+    for filename in os.listdir(folder_path):
+        if filename.endswith('.txt'):
+            text_files_found = True
+            file_path = os.path.join(folder_path, filename)
+            with open(file_path, 'r', encoding='utf-8') as file:
+                texts[filename] = file.read()
+
+    # テキストファイルが一つも見つからなかった場合のエラーメッセージ
+    if not text_files_found:
+        raise HTTPException(status_code=404, detail="txtfile Not found.")
+
+    return texts
 
 def create_or_load_chroma_db_background(csv_directory,persist_directory):
     AnswerFinder_settings.start = False
