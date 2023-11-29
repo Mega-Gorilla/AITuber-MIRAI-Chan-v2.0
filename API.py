@@ -62,8 +62,8 @@ class OCRResult(BaseModel):
 
 class game_data:
     Game_info_path = "data/game_info"
-    Game_info = ""
     Game_talkLog= []
+    Game_name = ""
 
 @app.post("/mic_mute/post/", tags=["Mic Settings"])
 def mic_post_item(mic_mute: bool = False):
@@ -501,8 +501,8 @@ def Doki_Doki_Literature_Club_ocr(debug: bool = False):
     else:
         return None
 
-@app.get("/GameData/talk_log/get",tags=["Game Data"])
-def get_game_talk_log(reset:bool = True):
+@app.get("/GameData/talk_log/get",tags=["Games"])
+def get_game_talk_log(reset:bool = False):
     """
     ゲームトークログを取得します
     """
@@ -511,15 +511,19 @@ def get_game_talk_log(reset:bool = True):
         game_data.Game_talkLog = ""
     return return_data
 
-@app.get("/GameData/GameInfo/get",tags=["Game Data"])
-def get_game_info(game_name: str):
+@app.get("/GameData/GameInfo/get",tags=["Games"])
+def get_game_info(game_name: str = ""):
     """
     data/game_infoにあるtxtファイルデータを取得して返します。
     """
-    texts = {}
+    if game_name == "" and game_data.Game_name != "":
+        game_name =  game_data.Game_name
+    elif game_name == "":
+        raise HTTPException(status_code=404, detail="Nothings GameName. Please set Game Name")
+    texts = ""
     text_files_found = False
     folder_path = game_data.Game_info_path
-    filename = game_name
+    filename = f"{game_name}.txt"
 
     # フォルダが存在するかチェック
     if not os.path.exists(folder_path):
@@ -530,13 +534,64 @@ def get_game_info(game_name: str):
             text_files_found = True
             file_path = os.path.join(folder_path, filename)
             with open(file_path, 'r', encoding='utf-8') as file:
-                texts[filename] = file.read()
+                texts = file.read()
 
     # テキストファイルが一つも見つからなかった場合のエラーメッセージ
     if not text_files_found:
         raise HTTPException(status_code=404, detail="txtfile Not found.")
 
     return texts
+
+@app.get("/GameList/get", tags=["Games"])
+def get_game_info():
+    """
+    data/game_infoにあるtxtファイル名のリストを取得して返します（.txt拡張子は除く）。
+    """
+    folder_path = game_data.Game_info_path
+    txt_files = []
+
+    # フォルダが存在するかチェック
+    if not os.path.exists(folder_path):
+        raise HTTPException(status_code=404, detail="Folder Not found.")
+
+    for filename in os.listdir(folder_path):
+        if filename.endswith('.txt'):
+            # .txt拡張子を除去してリストに追加
+            txt_files.append(filename.rstrip('.txt'))
+
+    # テキストファイルが一つも見つからなかった場合のエラーメッセージ
+    if not txt_files:
+        raise HTTPException(status_code=404, detail="txtfile Not found.")
+
+    return txt_files
+
+@app.post("/GameName/set", tags=["Games"])
+def set_game_name(game_name:str = ""):
+
+    folder_path = game_data.Game_info_path
+    txt_files = []
+
+    # フォルダが存在するかチェック
+    if not os.path.exists(folder_path):
+        raise HTTPException(status_code=404, detail="Folder Not found.")
+
+    for filename in os.listdir(folder_path):
+        if filename.endswith('.txt'):
+            # .txt拡張子を除去してリストに追加
+            txt_files.append(filename.rstrip('.txt'))
+
+    # テキストファイルが一つも見つからなかった場合のエラーメッセージ
+    if not txt_files:
+        raise HTTPException(status_code=404, detail="txtfile Not found.")
+    if game_name in txt_files or game_name == "":
+        game_data.Game_name = game_name
+        return game_name
+    else:
+        raise HTTPException(status_code=404, detail="Game info Data Not found.")
+    
+@app.get("/GameName/get", tags=["Games"])
+def get_game_name():
+    return game_data.Game_name
 
 def create_or_load_chroma_db_background(csv_directory,persist_directory):
     AnswerFinder_settings.start = False
