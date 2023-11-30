@@ -4,7 +4,6 @@ from module.server_requests import *
 from module.fast_whisper import *
 from module.deepl import atranslate_text
 from module.voicevox import *
-from module.GPTResponce_to_dict import *
 from rich import print
 from rich.console import Console
 import multiprocessing
@@ -36,11 +35,16 @@ class config:
     tone_example_top_n = 3
     motion_list_top_n = 5
 
+    #要約
+    summary_len = 5 #要約時log要素数が、summary_len要素以下の場合、要約は行われません。
+    summary_limit_token = 3000 #このトークン値を超えたら要約されます。
+    summary = "None"
+    game_summary = "None"
+
     #みらい1.5 プロンプト
     mirai_prompt_name = 'みらいV1.6'
     talk_logs = []
     talk_log_temp = []
-    summary = "None"
     viewer_count = 0
     subscriber_count = 0
 
@@ -61,8 +65,7 @@ Fun"""
 
     stream = False
     requestList = {}
-
-    summary_limit_token = 3000 #このトークン値を超えたら要約されます。
+    
     total_token = 0
 
     AI_gesture_emotion_state_list = []
@@ -223,6 +226,9 @@ async def Mirai_15_model():
                     key, value = list(d.items())[0]
                     talk_log += f"{key} -> {value}\n"
                 talk_log = talk_log.rstrip('\n')
+            
+            #Showrunner_adviceの取得
+            showrunner_advice = await post_data_from_server(f"{config.AI_Tuber_URL}/Showrunner_Advice/post/?mic_end=false")
 
             mirai_prompt_variables = {
                 "example_tone": streamer_tone,
@@ -230,7 +236,8 @@ async def Mirai_15_model():
                 "talk_logs": talk_log,
                 "subscribers_num": subscriber_count,
                 "viewers_num": viewer_count,
-                "viewer_comments": new_comment_str
+                "viewer_comments": new_comment_str,
+                "Showrunner_advice": showrunner_advice
             }
             stream_mode = config.stream
             print("\n------------------Prompt Data------------------")
@@ -292,15 +299,24 @@ async def Mirai_15_model():
             if usage_data!={}:
                 print(f"Usage Data: {usage_data}")
                 if usage_data.get(config.mirai_prompt_name, 0) > config.summary_limit_token:
-                    print("\033[31mプロンプト長さが規定値を超えました. 要約を実施します。\033[0m")
-                    #一時保存
-                    config.talk_log_temp = config.talk_logs
-                    for d in config.talk_logs:
-                        key, value = list(d.items())[0]
-                        talk_log += f"{key} -> {value}\n"
-                    talk_log = talk_log.rstrip('\n')
-                    old_summary = config.summary
-                    await post_data_from_server(URL=f"{config.GPT_Mangaer_URL}/openai/request/?prompt_name=talk_logTosummary&stream_mode=false",post_data={"variables": {"talk_log":talk_log,"old_talk_log":old_summary}})
+                    print("プロンプト長さが規定値を超えました!!")
+                    if len(config.talk_logs)>config.summary_len:
+                        print("会話ログを要約します")
+                        config.talk_log_temp = config.talk_logs #一時保存
+                        for d in config.talk_logs:
+                            key, value = list(d.items())[0]
+                            talk_log += f"{key} -> {value}\n"
+                        talk_log = talk_log.rstrip('\n')
+                        old_summary = config.summary
+                        await post_data_from_server(URL=f"{config.GPT_Mangaer_URL}/openai/request/?prompt_name=talk_logTosummary&stream_mode=false",post_data={"variables": {"talk_log":talk_log,"old_talk_log":old_summary}})
+                    game_title = await get_data_from_server(URL=f"{config.AI_Tuber_URL}/GameName/get")
+                    if game_title != "":
+                        print("GameLogを要約します")
+                        game_log = await get_data_from_server(URL=f"{config.AI_Tuber_URL}/GameData/talk_log/get?reset=false")
+                        old_game_log = config.game_summary
+                        game_info = get_data_from_server(URL=f"{config.AI_Tuber_URL}/GameData/GameInfo/get")
+                        await post_data_from_server(URL=f"{config.GPT_Mangaer_URL}/openai/request/?prompt_name=game_logTosummary&stream_mode=false",post_data={"variables": {"game_log":game_log,"old_game_log":old_game_log,"game_info":game_info}})
+                    
 
             #LLMの結果より処理を決定する
             if message_list != []: 
