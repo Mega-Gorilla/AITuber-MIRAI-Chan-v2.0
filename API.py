@@ -508,8 +508,16 @@ def get_game_talk_log(reset:bool = False):
     """
     return_data = game_data.Game_talkLog
     if reset:
-        game_data.Game_talkLog = ""
+        game_data.Game_talkLog = []
     return return_data
+
+@app.post("/GameData/talk_log/post",tags=["Games"])
+def post_game_talk_log(gamelog:list):
+    """
+    ゲームトークログを投稿します
+    """
+    game_data.Game_talkLog = gamelog
+    return game_data.Game_talkLog
 
 @app.get("/GameData/GameInfo/get",tags=["Games"])
 def get_game_info(game_name: str = ""):
