@@ -33,13 +33,14 @@ class config:
 
     #類似検索個数
     tone_example_top_n = 3
-    motion_list_top_n = 5
+    motion_list_top_n = 4
 
     #要約
     summary_len = 5 #要約時log要素数が、summary_len要素以下の場合、要約は行われません。
-    summary_limit_token = 3000 #このトークン値を超えたら要約されます。
+    summary_limit_token = 3500 #このトークン値を超えたら要約されます。
     summary = "None"
     game_summary = "None"
+    game_logs_temp = []
 
     #みらい1.5 プロンプト
     mirai_prompt_name = 'みらいV1.6'
@@ -113,7 +114,7 @@ async def get_mic_recorded_str():
     if mic_recorded_list == []:
         result = ""
     else:
-        result = '\n'.join([''.join(item) for item in mic_recorded_list])
+        result = '\n'.join([' '.join(item) for item in mic_recorded_list])
     return result
 
 def process1_function():
@@ -121,8 +122,8 @@ def process1_function():
     speech_to_text = AudioProcessor()
     audio_repeat = False
     try:
-        while requests.get(f"{config.AI_Tuber_URL}/Program_Fin_bool/get/").text.lower() == 'false':
-            response = requests.get(f"{config.AI_Tuber_URL}/mic_mute/get/")
+        while requests.get(f"{config.AI_Tuber_URL}/Program_Fin_bool/get/").text.lower() == 'false': #プログラム実行状況を確認
+            response = requests.get(f"{config.AI_Tuber_URL}/mic_mute/get/")     #マイク録音状態の確認
             if response.text.lower() == 'false':           
                 speech_to_text.process_stream()
                 print('mic end.')
@@ -132,10 +133,17 @@ def process1_function():
                 speech_to_text.reset()
                 speech_to_text.start()
 
-                speech_to_text.transcribe('output.wav')
+                text_data_list = speech_to_text.transcribe('output.wav',False)
                 speech_to_text.close()
+
+                requests.post(
+                    f'{config.AI_Tuber_URL}/mic_recorded_list/post/',
+                    json=text_data_list
+                )
+
                 audio_repeat = True
-                requests.post(f"{config.AI_Tuber_URL}/AI_talk_bool/post/?AI_talk=true")
+
+                #requests.post(f"{config.AI_Tuber_URL}/AI_talk_bool/post/?AI_talk=true")
             
             else:
                 if audio_repeat:
@@ -176,7 +184,7 @@ async def Mirai_15_model():
         mirai_talkSW = await get_data_from_server(f"{config.AI_Tuber_URL}/AI_talk_bool/get/") 
 
         if mirai_talkSW:
-            #会話ボタンを押した場合の処理
+            #AIトークボタンを押したときの処理
             await post_data_from_server(URL=f"{config.AI_Tuber_URL}/AI_talk_bool/post/",post_data={'AI_talk': False}) #問合せフラグをFalseに
             
             #みらいプロンプトに必要な関数情報を取得
@@ -204,7 +212,7 @@ async def Mirai_15_model():
                     subscriber_count = f"{new_subscriber_count['subscriber_count']} (Subscriber Change: {new_subscriber_count['subscriber_count']-config.subscriber_count})"
                 config.subscriber_count = new_subscriber_count['subscriber_count']
             
-            #マイク音声を取得
+            #Speech to Text文章を取得
             mic_recorded_str = await get_mic_recorded_str()
             config.talk_logs.append({"猩々 博士":mic_recorded_str})
 
@@ -230,6 +238,22 @@ async def Mirai_15_model():
             #Showrunner_adviceの取得
             showrunner_advice = await post_data_from_server(f"{config.AI_Tuber_URL}/Showrunner_Advice/post/?mic_end=false")
 
+            #game_infoを取得
+            other_streaming_info = ""
+            game_title = await get_data_from_server(URL=f"{config.AI_Tuber_URL}/GameName/get")
+            if game_title != "":
+                game_log = await get_data_from_server(URL=f"{config.AI_Tuber_URL}/GameData/talk_log/get?reset=false")
+                game_log_str = ""
+                for d in game_log:
+                    key = d["name"]
+                    value = d["text"]
+                    game_log_str += f"{key} -> {value}\n"
+                game_log_str = game_log_str.rstrip('\n')
+                game_summary = config.game_summary
+                game_info = await get_data_from_server(URL=f"{config.AI_Tuber_URL}/GameData/GameInfo/get")
+                other_streaming_info = "\n"+game_info + "\n\nSummary content of the game information being played:\n" + game_summary + "\n\nGame Logs:\n" + game_log_str
+
+
             mirai_prompt_variables = {
                 "example_tone": streamer_tone,
                 "stream_summary": config.summary,
@@ -237,7 +261,8 @@ async def Mirai_15_model():
                 "subscribers_num": subscriber_count,
                 "viewers_num": viewer_count,
                 "viewer_comments": new_comment_str,
-                "Showrunner_advice": showrunner_advice
+                "Showrunner_advice": showrunner_advice,
+                "other_streaming_info": other_streaming_info
             }
             stream_mode = config.stream
             print("\n------------------Prompt Data------------------")
@@ -267,8 +292,20 @@ async def Mirai_15_model():
                                 content = request_data['choices'][0]['message']['content']
                                 config.summary = content
                                 #会話データより要約済みデータを消去
-                                [item for item in config.talk_logs if item not in config.talk_log_temp]
-                                print(f"要約が実施されました。\n{content}")
+                                filtered_talk_logs = [item for item in config.talk_logs if item not in config.talk_log_temp]
+                                config.talk_logs = filtered_talk_logs
+                                print(f"会話要約が実施されました。\n{content}")
+                            elif request_id == "game_logTosummary":
+                                #ゲームログの要約が受信した場合
+                                content = request_data['choices'][0]['message']['content']
+                                config.game_summary = content
+                                print("\n------------------Summary Game Data------------------")
+                                #会話データより要約済みデータを消去
+                                game_log = await get_data_from_server(URL=f"{config.AI_Tuber_URL}/GameData/talk_log/get?reset=false")
+                                filtered_game_log = [item for item in game_log if item not in config.game_logs_temp]
+                                await post_data_from_server(URL=f"{config.AI_Tuber_URL}/GameData/talk_log/post",post_data=filtered_game_log)
+                                print(f"ゲームログが要約が実施されました。\n{content}")
+                                print("\n------------------ END ------------------")
 
                             else:
                                 #OpenAIレスポンスを辞書配列に変換する
@@ -303,6 +340,7 @@ async def Mirai_15_model():
                     if len(config.talk_logs)>config.summary_len:
                         print("会話ログを要約します")
                         config.talk_log_temp = config.talk_logs #一時保存
+                        talk_log = ""
                         for d in config.talk_logs:
                             key, value = list(d.items())[0]
                             talk_log += f"{key} -> {value}\n"
@@ -313,10 +351,16 @@ async def Mirai_15_model():
                     if game_title != "":
                         print("GameLogを要約します")
                         game_log = await get_data_from_server(URL=f"{config.AI_Tuber_URL}/GameData/talk_log/get?reset=false")
+                        config.game_logs_temp = game_log #一ぞ保存
+                        game_log_str = ""
+                        for d in game_log:
+                            key = d["name"]
+                            value = d["text"]
+                            game_log_str += f"{key} -> {value}\n"
+                        game_log_str = game_log_str.rstrip('\n')
                         old_game_log = config.game_summary
-                        game_info = get_data_from_server(URL=f"{config.AI_Tuber_URL}/GameData/GameInfo/get")
-                        await post_data_from_server(URL=f"{config.GPT_Mangaer_URL}/openai/request/?prompt_name=game_logTosummary&stream_mode=false",post_data={"variables": {"game_log":game_log,"old_game_log":old_game_log,"game_info":game_info}})
-                    
+                        game_info = await get_data_from_server(URL=f"{config.AI_Tuber_URL}/GameData/GameInfo/get")
+                        await post_data_from_server(URL=f"{config.GPT_Mangaer_URL}/openai/request/?prompt_name=game_logTosummary&stream_mode=false",post_data={"variables": {"game_log":game_log_str,"old_game_log":old_game_log,"game_info":game_info}})
 
             #LLMの結果より処理を決定する
             if message_list != []: 
