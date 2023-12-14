@@ -112,7 +112,7 @@ def Showrunner_advice_get():
         raise HTTPException(status_code=404, detail="Error decoding JSON.")
 
 @app.post("/Showrunner_Advice/post/", tags=["AI Tuber"])
-def Showrunner_advice_post(prompt_name:str="",mic_end: bool =False):
+def Showrunner_advice_post(prompt_name:str="",mic_end: bool =False,AI_talk:bool = False):
     """
     Showrunner_advice プロンプトを内容を取得する
     - prompt_name: 内容を取得するプロンプト名を設定する
@@ -134,11 +134,16 @@ def Showrunner_advice_post(prompt_name:str="",mic_end: bool =False):
     try:
         with open('data/showrunner_advice_list.json', 'r', encoding='utf-8') as file:
             data = json.load(file)
+
+            if AI_talk:
+                AI_Tuber_setting.AI_talk_bool = True
+            
             return data.get(prompt_name)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="File not found.")
     except json.JSONDecodeError:
         raise HTTPException(status_code=404, detail="Error decoding JSON.")
+    
 
 @app.get("/tone_similar/get/", tags=["Vector Store"])
 def tone_similar_get(str_dialogue:str,top_n:int = 3):
@@ -493,6 +498,7 @@ def Doki_Doki_Literature_Club_ocr(debug: bool = False):
     if ocr.reader == None:
         raise HTTPException(status_code=400, detail="Invalid ocr. Please initialize OCR.")
     text_data = Doki_Doki_Literature_Club_Get_str(ocr.reader,debug)
+    print(text_data)
     if text_data is None:
         raise HTTPException(status_code=400, detail="Could not obtain the specified application name.")
     if text_data["text"] != "":
@@ -511,11 +517,16 @@ def get_game_talk_log(reset:bool = False):
         game_data.Game_talkLog = []
     return return_data
 
+class GameLog(BaseModel):
+    name: str
+    text: str
+
 @app.post("/GameData/talk_log/post",tags=["Games"])
-def post_game_talk_log(gamelog:list):
+def post_game_talk_log(gamelog: List[GameLog]):
     """
     ゲームトークログを投稿します
     """
+    print(f"GameLog: {gamelog}")
     game_data.Game_talkLog = gamelog
     return game_data.Game_talkLog
 
