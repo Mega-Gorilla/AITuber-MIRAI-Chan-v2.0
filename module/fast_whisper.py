@@ -92,7 +92,7 @@ class AudioProcessor:
         # 結合したオーディオをファイルに保存
         combined.export(file_path, format="wav")
     
-    def transcribe(self,audio_wav):
+    def transcribe(self,audio_wav,post=True):
         segments, info = self.model.transcribe(audio_wav, beam_size=5, language='ja')
         segment_data = []
         if list[segments] == []:
@@ -101,10 +101,13 @@ class AudioProcessor:
             for segment in segments:
                 print("\033[92m{}\033[0m".format(segment.text))
                 segment_data.append(segment.text)
-        response = requests.post(
-            f'{self.URL}/mic_recorded_list/post/',
-            json=segment_data
-        )
+        if post:
+            response = requests.post(
+                f'{self.URL}/mic_recorded_list/post/',
+                json=segment_data
+            )
+            return response
+        return segment_data
 
     def close(self):
         self.stream.stop_stream()
