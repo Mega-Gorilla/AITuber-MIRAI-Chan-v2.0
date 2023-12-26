@@ -7,5 +7,8 @@
     "gameChara_opnion":"Ignoring the recent viewer comments, please express your opinions and thoughts about the game character based on the conversation log data of the game character.",
     "Stream_start":"The stream has started! Let's greet all the viewers!",
     "Stream_end":"The stream is coming to an end. After reflecting on the stream so far, let's express our gratitude to those who have watched. And don't forget to ask all the viewers to subscribe to the channel and leave a high rating!",
-    "emotionally":"Based on the previous conversation logs, please make an emotionally impactful statement that will move the viewers."
+    "emotionally":"Based on the previous conversation logs, please make an emotionally impactful statement that will move the viewers.",
+    "Commnet_angry":"Let's set aside 猩々 博士 for now and, while reading recent viewer comments, let's vent our anger at viewers who are commenting on the broadcast!",
+    "Commnet_gratitude":"Let's set aside 猩々 博士 for now and, while reading recent viewer comments, let's express our gratitude to the viewers!",
+    "Commnet_tukkomi":"Let's set aside Dr. Shojo for now and respond to viewer comments with Manzai-style retorts! Understand the viewers' jokes and deliver your sharp comebacks!"
 }
