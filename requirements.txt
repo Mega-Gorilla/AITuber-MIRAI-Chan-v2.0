@@ -6,6 +6,11 @@ janome
 httpx
 sounddevice
 numpy
+pytchat
 
 scikit-learn
 janome
+
+faster-whisper
+
+python-multipart
