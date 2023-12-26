@@ -64,7 +64,6 @@ Fun"""
     style_id = 20
     voicevox_save_path = 'voice_data'
 
-    stream = False
     requestList = {}
     
     total_token = 0
@@ -73,6 +72,9 @@ Fun"""
     VoiceVox_list = []
     motion_list = []
     translatedict = {}
+
+class LLM_config:
+    request_list = []
 
 console = Console()
         
@@ -125,6 +127,19 @@ async def get_mic_recorded_str():
     else:
         result = '\n'.join([' '.join(item) for item in mic_recorded_list])
     return result
+
+async def request_llm(prompt_name,variables,stream=False):
+    current_time = int(time.time() * 1000)
+    request_id = str(current_time)
+    await post_data_from_server(URL=f"{config.GPT_Mangaer_URL}/LLM/request/?prompt_name={prompt_name}&request_id={request_id}&stream_mode={stream}",post_data={"variables" : variables})
+    LLM_config.request_list.append({"request_id":request_id,"prompt_name":prompt_name,"stream":stream})
+
+    print("\n------------------Prompt Data------------------")
+    for key,value in variables.items():
+        print(f"{key}: {value}")
+    print("------------------ END ------------------")
+
+    return request_id
 
 async def reset_similarity_search():
     #類似検索を初期化する
@@ -258,7 +273,7 @@ async def Mirai_15_model():
     # 会話検索エンジンの初期化
     print("初期化中...")
     await reset_similarity_search() #類似検索の初期化
-    await get_data_from_server(URL=f"{config.GPT_Mangaer_URL}/openai/get/?reset=true") #OpneAIの回答履歴を消去
+    await get_data_from_server(URL=f"{config.GPT_Mangaer_URL}/LLM/get/?reset=true") #OpneAIの回答履歴を消去
     Add_preset(1,config.voicevox_name,config.speaker_uuid,config.style_id) #ViceVoxの初期化
     stream = audio_stream_start()
     print("初期化完了")
@@ -270,25 +285,26 @@ async def Mirai_15_model():
         mirai_talkSW = await get_data_from_server(f"{config.AI_Tuber_URL}/AI_talk_bool/get/") 
 
         if mirai_talkSW:
-            #AIトークボタンを押したときの処理
+            #---------------------------------- AIトークボタンを押したときの処理 ----------------------------------
             await post_data_from_server(URL=f"{config.AI_Tuber_URL}/AI_talk_bool/post/",post_data={'AI_talk': False}) #問合せフラグをFalseに
 
-            # アイリ1.6のプロンプト内容を取得
+            # アイリ向けプロンプト問い合わせをリクエストする
             mirai_prompt_variables = await get_mirai_prompt_variables()
-            stream_mode = config.stream
-            #リクエスト追加
-            config.requestList = {config.mirai_prompt_name:{"variables" : mirai_prompt_variables}}
-            await post_data_from_server(URL=f"{config.GPT_Mangaer_URL}/openai/request/?prompt_name={config.mirai_prompt_name}&stream_mode={stream_mode}",post_data={"variables" : mirai_prompt_variables})
-            # 情報の表示
-            print("\n------------------Prompt Data------------------")
-            for key,value in mirai_prompt_variables.items():
-                print(f"{key}: {value}")
-            print("------------------ END ------------------")
+
+            #LLMにリクエスト
+            request_llm(config.mirai_prompt_name,True,mirai_prompt_variables)
 
         else:
             #---------------------------------- AI Talkボタンが押されていないときの処理 -------------------------------
+            if len(LLM_config.request_list) == 0:
+                #LLMリクエスト行われていないときはループ無視
+                await asyncio.sleep(1)
+                continue
+
+
+
             #LLMの回答データの取得
-            requests = await get_data_from_server(URL=f"{config.GPT_Mangaer_URL}/openai/get/?reset=true")
+            requests = await get_data_from_server(URL=f"{config.GPT_Mangaer_URL}/LLM/get/?reset=true")
             message_list = []
             usage_data = {}
 
@@ -340,12 +356,12 @@ async def Mirai_15_model():
                             prompt_name = request_data['request_id']
                             error("OpenAIサーバー問合せ時に問題が発生しました。",request_data['choices'][0]['message'],{"RequestID":request_data['request_id'],"request_data":request_data})
                             print(f"{prompt_name}を再リクエストします。")
-                            await post_data_from_server(URL=f"{config.GPT_Mangaer_URL}/openai/request/?prompt_name={prompt_name}&stream_mode=false",post_data=config.requestList[prompt_name])
+                            await post_data_from_server(URL=f"{config.GPT_Mangaer_URL}/LLM/request/?prompt_name={prompt_name}&stream_mode=false",post_data=config.requestList[prompt_name])
                     except Exception as e:
                         print(f'問い合わせにエラーが発生しています。\n')
                         prompt_name = request_data['request_id']
                         error("OpenAIの応答データを辞書配列に変換できませんでした。",f"{prompt_name} の変換に失敗",{"RequestID":request_data['request_id'],"request_data":request_data})
-                        await post_data_from_server(URL=f"{config.GPT_Mangaer_URL}/openai/request/?prompt_name={prompt_name}&stream_mode=false",post_data=config.requestList[prompt_name])
+                        await post_data_from_server(URL=f"{config.GPT_Mangaer_URL}/LLM/request/?prompt_name={prompt_name}&stream_mode=false",post_data=config.requestList[prompt_name])
             
             #要約を実施する
             if usage_data!={}:
@@ -361,7 +377,7 @@ async def Mirai_15_model():
                             talk_log += f"{key} -> {value}\n"
                         talk_log = talk_log.rstrip('\n')
                         old_summary = config.summary
-                        await post_data_from_server(URL=f"{config.GPT_Mangaer_URL}/openai/request/?prompt_name=talk_logTosummary&stream_mode=false",post_data={"variables": {"talk_log":talk_log,"old_talk_log":old_summary}})
+                        await post_data_from_server(URL=f"{config.GPT_Mangaer_URL}/LLM/request/?prompt_name=talk_logTosummary&stream_mode=false",post_data={"variables": {"talk_log":talk_log,"old_talk_log":old_summary}})
                     game_title = await get_data_from_server(URL=f"{config.AI_Tuber_URL}/GameName/get")
                     if game_title != "":
                         print("GameLogを要約します")
@@ -375,7 +391,7 @@ async def Mirai_15_model():
                         game_log_str = game_log_str.rstrip('\n')
                         old_game_log = config.game_summary
                         game_info = await get_data_from_server(URL=f"{config.AI_Tuber_URL}/GameData/GameInfo/get")
-                        await post_data_from_server(URL=f"{config.GPT_Mangaer_URL}/openai/request/?prompt_name=game_logTosummary&stream_mode=false",post_data={"variables": {"game_log":game_log_str,"old_game_log":old_game_log,"game_info":game_info}})
+                        await post_data_from_server(URL=f"{config.GPT_Mangaer_URL}/LLM/request/?prompt_name=game_logTosummary&stream_mode=false",post_data={"variables": {"game_log":game_log_str,"old_game_log":old_game_log,"game_info":game_info}})
 
             #LLMの結果より処理を決定する
             if message_list != []: 
@@ -424,7 +440,7 @@ async def Mirai_15_model():
                         gesture_str = item['gesture']
                     except Exception as e:
                         error("mirai1.6ToDictが正しく辞書配列に変換できませんでした。",item,{"mirai1.6ToDict Data":item})
-                        await post_data_from_server(URL=f"{config.GPT_Mangaer_URL}/openai/request/?prompt_name=mirai1.6ToDict&stream_mode=false",post_data=config.requestList["mirai1.6ToDict"])
+                        await post_data_from_server(URL=f"{config.GPT_Mangaer_URL}/LLM/request/?prompt_name=mirai1.6ToDict&stream_mode=false",post_data=config.requestList["mirai1.6ToDict"])
                         break
                     print(f"未来 アイリ -> {statement_str}")
 
@@ -438,7 +454,7 @@ async def Mirai_15_model():
                 #VoiceTone問合せ実施
                 if statement_to_voiceTone_prompt != "":
                     config.requestList = {"statementsToVoiceVoxparameter":{"variables" : {"talk_data":statement_to_voiceTone_prompt}}}
-                    await post_data_from_server(URL=f"{config.GPT_Mangaer_URL}/openai/request/?prompt_name=statementsToVoiceVoxparameter&stream_mode=false",post_data={"variables": {"talk_data":statement_to_voiceTone_prompt}})
+                    await post_data_from_server(URL=f"{config.GPT_Mangaer_URL}/LLM/request/?prompt_name=statementsToVoiceVoxparameter&stream_mode=false",post_data={"variables": {"talk_data":statement_to_voiceTone_prompt}})
 
                     #ジェスチャー類似検索実施
                     for item in gesture_list:
@@ -458,7 +474,7 @@ async def Mirai_15_model():
                         anim_list+=f"{key} : {value}\n"
                     #Motionの問い合わせ実施
                     config.requestList = {"Statement_to_animMotion":{"variables" : {"talk_data":statement_to_motion_prompt,"anim_list":anim_list}}}
-                    await post_data_from_server(URL=f"{config.GPT_Mangaer_URL}/openai/request/?prompt_name=Statement_to_animMotion&stream_mode=false",post_data={"variables": {"talk_data":statement_to_motion_prompt,"anim_list":anim_list}})
+                    await post_data_from_server(URL=f"{config.GPT_Mangaer_URL}/LLM/request/?prompt_name=Statement_to_animMotion&stream_mode=false",post_data={"variables": {"talk_data":statement_to_motion_prompt,"anim_list":anim_list}})
                     
                 #会話データをリセットする
                 config.AI_gesture_emotion_state_list = []
