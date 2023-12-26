@@ -84,6 +84,15 @@ async def youtube_counter_initialize():
     if "subscriber_count" in subscriber_count:
         config.subscriber_count = subscriber_count['subscriber_count']
 
+async def youtube_API_Check():
+    commnet_url = await get_data_from_server(f"{config.AI_Tuber_URL}/youtube_api/get_stream_url/")
+    if commnet_url == "":
+        warning_message("Stream URLが設定されていません。Youtube APIが利用できません!")
+    else:
+        await youtube_counter_initialize()
+        # コメント取得開始
+        await post_data_from_server(f"{config.AI_Tuber_URL}/youtube_api/chat_fetch/sw/?chat_fecth_sw=true")
+
 async def get_youtube_comments_str():
     #Youtubeデータ取得
     new_comment_str = ""
@@ -117,13 +126,104 @@ async def get_mic_recorded_str():
         result = '\n'.join([' '.join(item) for item in mic_recorded_list])
     return result
 
+async def reset_similarity_search():
+    #類似検索を初期化する
+    print(await get_data_from_server(f"{config.AI_Tuber_URL}/tone_similar/start/")) #類似検索を初期化
+    await asyncio.sleep(0)
+    print(await get_data_from_server(f"{config.AI_Tuber_URL}/motion_similar/start/")) #類似検索を初期化
+    await asyncio.sleep(0)
+
+async def get_mirai_prompt_variables():
+
+    mirai_prompt_name = config.mirai_prompt_name
+    #みらいプロンプトに必要な関数情報を取得
+    mirai_prompt_data = await get_data_from_server(f"{config.GPT_Mangaer_URL}/prompts-get/lookup_prompt_by_name?prompt_name={mirai_prompt_name}")
+    mirai_prompt_variables = mirai_prompt_data['variables']
+    
+    #Youtubeデータ取得
+    new_comment_str = await get_youtube_comments_str()
+    new_viewer_count = await get_youtube_viewer_counts()
+    new_subscriber_count = await get_youtube_subscriber_counts()
+
+    viewer_count = "No Data."
+    if new_viewer_count['ok']==True:
+        if config.viewer_count == new_viewer_count['viewer_count']:
+            viewer_count = f"{new_viewer_count['viewer_count']} (Viewership Change: 0)"
+        else:
+            viewer_count = f"{new_viewer_count['viewer_count']} (Viewership Change: {new_viewer_count['viewer_count']-config.viewer_count})"
+        config.viewer_count = new_viewer_count['viewer_count']
+
+    subscriber_count = "No Data."
+    if new_subscriber_count['ok']==True:
+        if config.subscriber_count == new_subscriber_count['subscriber_count']:
+            subscriber_count = f"{new_subscriber_count['subscriber_count']} (Subscriber Change: 0)"
+        else:
+            subscriber_count = f"{new_subscriber_count['subscriber_count']} (Subscriber Change: {new_subscriber_count['subscriber_count']-config.subscriber_count})"
+        config.subscriber_count = new_subscriber_count['subscriber_count']
+    
+    #Speech to Text文章を取得
+    mic_recorded_str = await get_mic_recorded_str()
+    config.talk_logs.append({"猩々 博士":mic_recorded_str})
+
+    #類似会話例を取得
+    serch_tone_word = mic_recorded_str.split('\n')[0]
+    streamer_tone_dict = await get_data_from_server(f"{config.AI_Tuber_URL}/tone_similar/get/?str_dialogue={serch_tone_word}&top_n={config.tone_example_top_n}")
+    streamer_tone = ''
+    for d in streamer_tone_dict:
+        if 'ok' in d:
+            if d['ok']==False:
+                streamer_tone = 'None'
+        elif 'text' in d:
+            streamer_tone+=d['text']+"\n"
+
+    #会話ログを作成
+    talk_log = ""
+    if config.talk_logs != []:
+        for d in config.talk_logs:
+            key, value = list(d.items())[0]
+            talk_log += f"{key} -> {value}\n"
+        talk_log = talk_log.rstrip('\n')
+    
+    #Showrunner_adviceの取得
+    showrunner_advice = await post_data_from_server(f"{config.AI_Tuber_URL}/Showrunner_Advice/post/?mic_end=false")
+
+    #game_infoを取得
+    other_streaming_info = ""
+    game_title = await get_data_from_server(URL=f"{config.AI_Tuber_URL}/GameName/get")
+    if game_title != "":
+        game_log = await get_data_from_server(URL=f"{config.AI_Tuber_URL}/GameData/talk_log/get?reset=false")
+        game_log_str = ""
+        for d in game_log:
+            key = d["name"]
+            value = d["text"]
+            game_log_str += f"{key} -> {value}\n"
+        game_log_str = game_log_str.rstrip('\n')
+        game_summary = config.game_summary
+        game_info = await get_data_from_server(URL=f"{config.AI_Tuber_URL}/GameData/GameInfo/get")
+        other_streaming_info = "\n"+game_info + "\n\nSummary content of the game information being played:\n" + game_summary + "\n\nGame Logs:\n" + game_log_str
+
+
+    mirai_prompt_variables = {
+        "example_tone": streamer_tone,
+        "stream_summary": config.summary,
+        "talk_logs": talk_log,
+        "subscribers_num": subscriber_count,
+        "viewers_num": viewer_count,
+        "viewer_comments": new_comment_str,
+        "Showrunner_advice": showrunner_advice,
+        "other_streaming_info": other_streaming_info
+    }
+
+    return mirai_prompt_variables
+
 def process1_function():
     #マイク音声聞き取り＋文字化
     speech_to_text = AudioProcessor()
-    audio_repeat = False
     try:
         while requests.get(f"{config.AI_Tuber_URL}/Program_Fin_bool/get/").text.lower() == 'false': #プログラム実行状況を確認
             response = requests.get(f"{config.AI_Tuber_URL}/mic_mute/get/")     #マイク録音状態の確認
+
+            # マイク録音開始の場合。
             if response.text.lower() == 'false':           
                 speech_to_text.process_stream()
                 print('mic end.')
@@ -132,23 +232,18 @@ def process1_function():
                 speech_to_text.save_buffer_to_file('output.wav')
                 speech_to_text.reset()
                 speech_to_text.start()
-
+                
+                #録音音声データを文字化する
                 text_data_list = speech_to_text.transcribe('output.wav',False)
                 speech_to_text.close()
 
+                #マイク文字列データをポスト
                 requests.post(
                     f'{config.AI_Tuber_URL}/mic_recorded_list/post/',
                     json=text_data_list
                 )
-
-                audio_repeat = True
-
-                #requests.post(f"{config.AI_Tuber_URL}/AI_talk_bool/post/?AI_talk=true")
             
             else:
-                if audio_repeat:
-                    speech_to_text.play_wav_file('output.wav')
-                    audio_repeat = False
                 if os.path.isfile(config.voicevox_save_path) and config.voicevox_save_path.endswith('.wav'):
                     pass
                 time.sleep(1)
@@ -162,123 +257,41 @@ def process1_function():
 async def Mirai_15_model():
     # 会話検索エンジンの初期化
     print("初期化中...")
-    print(await get_data_from_server(f"{config.AI_Tuber_URL}/tone_similar/start/")) #類似検索を初期化
-    await asyncio.sleep(0)
-    print(await get_data_from_server(f"{config.AI_Tuber_URL}/motion_similar/start/")) #類似検索を初期化
+    await reset_similarity_search() #類似検索の初期化
     await get_data_from_server(URL=f"{config.GPT_Mangaer_URL}/openai/get/?reset=true") #OpneAIの回答履歴を消去
     Add_preset(1,config.voicevox_name,config.speaker_uuid,config.style_id) #ViceVoxの初期化
     stream = audio_stream_start()
     print("初期化完了")
 
     # YoutubeAPIが設定されているか確認
-    commnet_url = await get_data_from_server(f"{config.AI_Tuber_URL}/youtube_api/get_stream_url/")
-    if commnet_url == "":
-        warning_message("Stream URLが設定されていません。Youtube APIが利用できません!")
-    else:
-        await youtube_counter_initialize()
-        # コメント取得開始
-        await post_data_from_server(f"{config.AI_Tuber_URL}/youtube_api/chat_fetch/sw/?chat_fecth_sw=true")
+    await youtube_API_Check()
     
     while await get_data_from_server(f"{config.AI_Tuber_URL}/Program_Fin_bool/get/") == False:
-        mirai_prompt_name = config.mirai_prompt_name
         mirai_talkSW = await get_data_from_server(f"{config.AI_Tuber_URL}/AI_talk_bool/get/") 
 
         if mirai_talkSW:
             #AIトークボタンを押したときの処理
             await post_data_from_server(URL=f"{config.AI_Tuber_URL}/AI_talk_bool/post/",post_data={'AI_talk': False}) #問合せフラグをFalseに
-            
-            #みらいプロンプトに必要な関数情報を取得
-            mirai_prompt_data = await get_data_from_server(f"{config.GPT_Mangaer_URL}/prompts-get/lookup_prompt_by_name?prompt_name={mirai_prompt_name}")
-            mirai_prompt_variables = mirai_prompt_data['variables']
-            
-            #Youtubeデータ取得
-            new_comment_str = await get_youtube_comments_str()
-            new_viewer_count = await get_youtube_viewer_counts()
-            new_subscriber_count = await get_youtube_subscriber_counts()
 
-            viewer_count = "No Data."
-            if new_viewer_count['ok']==True:
-                if config.viewer_count == new_viewer_count['viewer_count']:
-                    viewer_count = f"{new_viewer_count['viewer_count']} (Viewership Change: 0)"
-                else:
-                    viewer_count = f"{new_viewer_count['viewer_count']} (Viewership Change: {new_viewer_count['viewer_count']-config.viewer_count})"
-                config.viewer_count = new_viewer_count['viewer_count']
-
-            subscriber_count = "No Data."
-            if new_subscriber_count['ok']==True:
-                if config.subscriber_count == new_subscriber_count['subscriber_count']:
-                    subscriber_count = f"{new_subscriber_count['subscriber_count']} (Subscriber Change: 0)"
-                else:
-                    subscriber_count = f"{new_subscriber_count['subscriber_count']} (Subscriber Change: {new_subscriber_count['subscriber_count']-config.subscriber_count})"
-                config.subscriber_count = new_subscriber_count['subscriber_count']
-            
-            #Speech to Text文章を取得
-            mic_recorded_str = await get_mic_recorded_str()
-            config.talk_logs.append({"猩々 博士":mic_recorded_str})
-
-            #類似会話例を取得
-            serch_tone_word = mic_recorded_str.split('\n')[0]
-            streamer_tone_dict = await get_data_from_server(f"{config.AI_Tuber_URL}/tone_similar/get/?str_dialogue={serch_tone_word}&top_n={config.tone_example_top_n}")
-            streamer_tone = ''
-            for d in streamer_tone_dict:
-                if 'ok' in d:
-                    if d['ok']==False:
-                        streamer_tone = 'None'
-                elif 'text' in d:
-                    streamer_tone+=d['text']+"\n"
-
-            #会話ログを作成
-            talk_log = ""
-            if config.talk_logs != []:
-                for d in config.talk_logs:
-                    key, value = list(d.items())[0]
-                    talk_log += f"{key} -> {value}\n"
-                talk_log = talk_log.rstrip('\n')
-            
-            #Showrunner_adviceの取得
-            showrunner_advice = await post_data_from_server(f"{config.AI_Tuber_URL}/Showrunner_Advice/post/?mic_end=false")
-
-            #game_infoを取得
-            other_streaming_info = ""
-            game_title = await get_data_from_server(URL=f"{config.AI_Tuber_URL}/GameName/get")
-            if game_title != "":
-                game_log = await get_data_from_server(URL=f"{config.AI_Tuber_URL}/GameData/talk_log/get?reset=false")
-                game_log_str = ""
-                for d in game_log:
-                    key = d["name"]
-                    value = d["text"]
-                    game_log_str += f"{key} -> {value}\n"
-                game_log_str = game_log_str.rstrip('\n')
-                game_summary = config.game_summary
-                game_info = await get_data_from_server(URL=f"{config.AI_Tuber_URL}/GameData/GameInfo/get")
-                other_streaming_info = "\n"+game_info + "\n\nSummary content of the game information being played:\n" + game_summary + "\n\nGame Logs:\n" + game_log_str
-
-
-            mirai_prompt_variables = {
-                "example_tone": streamer_tone,
-                "stream_summary": config.summary,
-                "talk_logs": talk_log,
-                "subscribers_num": subscriber_count,
-                "viewers_num": viewer_count,
-                "viewer_comments": new_comment_str,
-                "Showrunner_advice": showrunner_advice,
-                "other_streaming_info": other_streaming_info
-            }
+            # アイリ1.6のプロンプト内容を取得
+            mirai_prompt_variables = await get_mirai_prompt_variables()
             stream_mode = config.stream
+            #リクエスト追加
+            config.requestList = {config.mirai_prompt_name:{"variables" : mirai_prompt_variables}}
+            await post_data_from_server(URL=f"{config.GPT_Mangaer_URL}/openai/request/?prompt_name={config.mirai_prompt_name}&stream_mode={stream_mode}",post_data={"variables" : mirai_prompt_variables})
+            # 情報の表示
             print("\n------------------Prompt Data------------------")
             for key,value in mirai_prompt_variables.items():
                 print(f"{key}: {value}")
             print("------------------ END ------------------")
 
-            #リクエスト追加
-            config.requestList = {mirai_prompt_name:{"variables" : mirai_prompt_variables}}
-            await post_data_from_server(URL=f"{config.GPT_Mangaer_URL}/openai/request/?prompt_name={mirai_prompt_name}&stream_mode={stream_mode}",post_data={"variables" : mirai_prompt_variables})
-
         else:
-            #GPTのデータを受信
+            #---------------------------------- AI Talkボタンが押されていないときの処理 -------------------------------
+            #LLMの回答データの取得
             requests = await get_data_from_server(URL=f"{config.GPT_Mangaer_URL}/openai/get/?reset=true")
             message_list = []
-            usage_data={}
+            usage_data = {}
+
             # GPTレスポンスデータを取得する
             if requests != []:
                 for request_data in requests:
@@ -287,6 +300,7 @@ async def Mirai_15_model():
                             #OPENAI よりデータが返された時
                             request_id = request_data['request_id']
                             print(f"OpenAIからの応答: {request_id}\n{request_data['choices'][0]}\n")
+
                             if request_id == "talk_logTosummary":
                                 #要約が送信された場合
                                 content = request_data['choices'][0]['message']['content']
@@ -295,6 +309,7 @@ async def Mirai_15_model():
                                 filtered_talk_logs = [item for item in config.talk_logs if item not in config.talk_log_temp]
                                 config.talk_logs = filtered_talk_logs
                                 print(f"会話要約が実施されました。\n{content}")
+                                
                             elif request_id == "game_logTosummary":
                                 #ゲームログの要約が受信した場合
                                 content = request_data['choices'][0]['message']['content']
