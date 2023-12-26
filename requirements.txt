@@ -1,7 +1,4 @@
-azure-cognitiveservices-speech
 rich
-openai
-streamlit
 janome
 httpx
 sounddevice
@@ -12,5 +9,6 @@ scikit-learn
 janome
 
 faster-whisper
-
-python-multipart
+pydub
+pyaudio
+aiohttp
