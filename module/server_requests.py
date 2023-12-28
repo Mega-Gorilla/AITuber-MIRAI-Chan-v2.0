@@ -2,7 +2,7 @@
 from rich import print
 import asyncio
 import httpx
-from httpx import ConnectError, HTTPStatusError
+from httpx import ConnectError, HTTPStatusError, TooManyRedirects, RequestError, NetworkError
 try:
     from module.rich_desgin import error
 except ImportError:
@@ -80,9 +80,10 @@ async def get_data_from_server(URL, max_retries=3, delay=1):
     retries = 0
 
     while retries < max_retries:
+        response = None
         try:
             # httpxの非同期クライアントを使用して非同期的なリクエストを行う
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(max_redirects=max_retries) as client:
                 response = await client.get(URL)
                 # レスポンスのステータスコードが200（成功）の場合
                 response.raise_for_status()
@@ -99,13 +100,23 @@ async def get_data_from_server(URL, max_retries=3, delay=1):
             error("HTTP Error:", f"{e}", {"Mode":"Get","URL": URL,"Request Count":retries})
             retries += 1
             await asyncio.sleep(delay)
-        except Exception as e:
-            # 上記以外のエラーが発生した場合は、エラーメッセージを表示して、Noneを返す
-            error("An error occurred:", f"{e}", {"Mode":"Get","URL": URL,"Request Count":retries})
+        except TooManyRedirects as e:
+            # リダイレクトの最大数を超えた場合は、エラーメッセージを表示して、Noneを返す
+            error("Too Many Redirects:", f"{e}", {"Mode":"Get","URL": URL,"Request Count":retries})
+            return None
+        except RequestError as e:
+            error("Request Error:", f"{e}", {"Mode":"Get","URL": URL,"Request Count":retries})
             retries += 1
             await asyncio.sleep(delay)
-    print(f"All {max_retries} connection attempts failed.")
-    return None
+        except NetworkError as e:
+            error("NetworkError:", f"{e}", {"Mode":"Get","URL": URL,"Request Count":retries})
+            retries += 1
+            await asyncio.sleep(delay)
+        except Exception as e:
+            # 上記以外のエラーが発生した場合は、エラーメッセージを表示して、Noneを返す
+            error("An error occurred:", f"{e}", {"Mode":"Get","URL": URL,"Request Count":retries,"Responce_data":response})
+            retries += 1
+            await asyncio.sleep(delay)
 
 # GPTにリクエストするための非同期関数
 async def request_GPT(ID,URL, prompt_name, user_assistant_prompt=None, variables=None, stream=False):
