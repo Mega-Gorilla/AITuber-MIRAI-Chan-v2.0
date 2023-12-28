@@ -160,7 +160,7 @@ def Add_preset(id: int,name: str,speaker_uuid: str,style_id=0,speedScale=1.0,pit
                 query_data = r.json()
                 break
         except requests.exceptions.ConnectionError as e:
-            print(f"接続エラー発生: {e}. リトライ中... ({query_i + 1}/{max_retry})")
+            print(f"Voice Vox:接続エラー発生: {e}. リトライ中... ({query_i + 1}/{max_retry})")
             time.sleep(1)
     else:
         raise ConnectionError(f"Add_preset エラー：リトライ回数が上限に到達しました。最終エラー: {e}")
