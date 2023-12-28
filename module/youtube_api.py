@@ -1,4 +1,4 @@
-from server_requests import *
+from module.server_requests import *
 
 class config:
     AI_Tuber_URL = "http://127.0.0.1:8001"
