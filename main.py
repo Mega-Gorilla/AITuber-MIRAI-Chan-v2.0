@@ -5,6 +5,8 @@ from module.fast_whisper import *
 from module.deepl import atranslate_text
 from module.voicevox import *
 from module.youtube_api import *
+from module.LLM_Process import *
+from module.LLM_Request import *
 from rich import print
 from rich.console import Console
 import multiprocessing
@@ -38,13 +40,11 @@ class config:
 
     #要約
     summary_len = 5 #要約時log要素数が、summary_len要素以下の場合、要約は行われません。
-    summary_limit_token = 3500 #このトークン値を超えたら要約されます。
-    summary = "None"
     game_summary = "None"
     game_logs_temp = []
 
     #みらい1.5 プロンプト
-    mirai_prompt_name = 'airi_v16'
+    mirai_prompt_name = 'airi_v17'
     talk_logs = []
     talk_log_temp = []
     viewer_count = 0
@@ -75,7 +75,18 @@ Fun"""
     translatedict = {}
 
 class LLM_config:
-    request_list = []
+    #プロンプトごとの呼び出す関数を選択
+    request_function_map = {
+        "talk_logTosummary":request_talk_logTosummary,
+        "game_logTosummary":request_game_logTosummary
+        }
+    process_function_map = {
+        "airi_v17": process_airi_v17,
+        "airi_v17_gemini":process_airi_v17,
+        "talk_logTosummary":process_talk_logTosummary,
+        "game_logTosummary":process_game_logTosummary
+        }
+
 
 console = Console()
         
@@ -109,7 +120,7 @@ async def request_llm(prompt_name,variables,stream=False):
     request_id = str(current_time)
 
     await post_data_from_server(URL=f"{config.GPT_Mangaer_URL}/LLM/request/?prompt_name={prompt_name}&request_id={request_id}&stream_mode={stream}",post_data={"variables" : variables})
-    LLM_config.request_list.append({"request_id":request_id,"prompt_name":prompt_name,"stream":stream})
+    await post_data_from_server(URL=f"{config.AI_Tuber_URL}/LLM/process/post/?request_id={request_id}&prompt_name={prompt_name}&stream={stream}")
 
     print("\n------------------Prompt Data------------------")
     for key,value in variables.items():
@@ -155,7 +166,7 @@ async def get_mirai_prompt_variables():
     
     #Speech to Text文章を取得
     mic_recorded_str = await get_mic_recorded_str()
-    config.talk_logs.append({"猩々 博士":mic_recorded_str})
+    await post_data_from_server(URL=f"{config.AI_Tuber_URL}/talk_log/post",post_data={"博士":mic_recorded_str})
 
     #類似会話例を取得
     serch_tone_word = mic_recorded_str.split('\n')[0]
@@ -170,11 +181,15 @@ async def get_mirai_prompt_variables():
 
     #会話ログを作成
     talk_log = ""
-    if config.talk_logs != []:
-        for d in config.talk_logs:
+    talk_log_list = await get_data_from_server(f"{config.AI_Tuber_URL}/talk_log/get?reset=false")
+    if talk_log_list != []:
+        for d in talk_log_list:
             key, value = list(d.items())[0]
             talk_log += f"{key} -> {value}\n"
         talk_log = talk_log.rstrip('\n')
+    
+    #Summaryの取得
+    stream_summary = await get_data_from_server(URL=f"{config.AI_Tuber_URL}/summary/get")
     
     #Showrunner_adviceの取得
     showrunner_advice = await post_data_from_server(f"{config.AI_Tuber_URL}/Showrunner_Advice/post/?mic_end=false")
@@ -190,14 +205,14 @@ async def get_mirai_prompt_variables():
             value = d["text"]
             game_log_str += f"{key} -> {value}\n"
         game_log_str = game_log_str.rstrip('\n')
-        game_summary = config.game_summary
+        game_summary = await get_data_from_server(URL=f"{config.AI_Tuber_URL}/GameData/summary/get")
         game_info = await get_data_from_server(URL=f"{config.AI_Tuber_URL}/GameData/GameInfo/get")
         other_streaming_info = "\n"+game_info + "\n\nSummary content of the game information being played:\n" + game_summary + "\n\nGame Logs:\n" + game_log_str
 
 
     mirai_prompt_variables = {
         "example_tone": streamer_tone,
-        "stream_summary": config.summary,
+        "stream_summary": stream_summary,
         "talk_logs": talk_log,
         "subscribers_num": subscriber_count,
         "viewers_num": viewer_count,
@@ -268,24 +283,43 @@ async def Mirai_15_model():
             # アイリ向けプロンプト問い合わせをリクエストする
             mirai_prompt_variables = await get_mirai_prompt_variables()
 
-            #LLMにリクエスト
-            request_llm(config.mirai_prompt_name,True,mirai_prompt_variables)
+            #LLM問合せリクエスト
+            await post_data_from_server(f"{config.AI_Tuber_URL}/LLM/request/post/?prompt_name={config.mirai_prompt_name}&stream=true",mirai_prompt_variables)
+            #await request_llm(prompt_name=config.mirai_prompt_name,variables=mirai_prompt_variables,stream=True)
 
         else:
             #---------------------------------- AI Talkボタンが押されていないときの処理 -------------------------------
-            if len(LLM_config.request_list) == 0:
+            #-------- LLMへのリクエストリストを処理する
+            request_list = await get_data_from_server(f"{config.AI_Tuber_URL}/LLM/request/get/?reset=true")
+            if len(request_list) != 0:
+                for item in request_list:
+                    if item['variables'] != {}:
+                        #すでに変数が代入されているものはリクエストに追加。
+                        await request_llm(prompt_name=item['prompt_name'],variables=item['variables'],stream=item['stream'])
+                    else:
+                        #変数が代入されていない場合は、変数問合せ実行
+                        variables = await LLM_config.request_function_map[item['prompt_name']]
+                        await request_llm(prompt_name=item['prompt_name'],variables=variables,stream=item['stream'])
+
+            #-------- LLMへのプロセスリストを処理する
+            process_list = await get_data_from_server(f"{config.AI_Tuber_URL}/LLM/process/get/")
+            if len(process_list) == 0:
                 #LLMリクエスト行われていないときはループ無視
                 await asyncio.sleep(1)
                 continue
 
             #タスクを追加する
-            tasks = []
-            for request in LLM_config.request_list:
-                #{"request_id":request_id,"prompt_name":prompt_name,"stream":stream}
-                tasks.append(request["prompt_name"](request["request_id"]))
-            #タスク完了を待機する
-            completed = await asyncio.gather(*tasks)
+            stream_true = [item for item in process_list if item["stream"]]
+            stream_false = [item for item in process_list if not item["stream"]]
 
+            #Streamタスクについては即時タスク化
+            for request in stream_true:
+                asyncio.create_task(LLM_config.process_function_map[request["prompt_name"]](request["request_id"]))
+                await get_data_from_server(f"{config.AI_Tuber_URL}/LLM/process/get/?del_request_id={request['request_id']}")
+
+            #----------------------------------
+            await asyncio.sleep(1)
+            continue
             #LLMの回答データの取得
             requests = await get_data_from_server(URL=f"{config.GPT_Mangaer_URL}/LLM/get/?reset=true")
             message_list = []
