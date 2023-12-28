@@ -4,6 +4,7 @@ from module.server_requests import *
 from module.fast_whisper import *
 from module.deepl import atranslate_text
 from module.voicevox import *
+from module.youtube_api import *
 from rich import print
 from rich.console import Console
 import multiprocessing
@@ -43,7 +44,7 @@ class config:
     game_logs_temp = []
 
     #みらい1.5 プロンプト
-    mirai_prompt_name = 'みらいV1.6'
+    mirai_prompt_name = 'airi_v16'
     talk_logs = []
     talk_log_temp = []
     viewer_count = 0
@@ -95,31 +96,6 @@ async def youtube_API_Check():
         # コメント取得開始
         await post_data_from_server(f"{config.AI_Tuber_URL}/youtube_api/chat_fetch/sw/?chat_fecth_sw=true")
 
-async def get_youtube_comments_str():
-    #Youtubeデータ取得
-    new_comment_str = ""
-    if await get_data_from_server(f"{config.AI_Tuber_URL}/youtube_api/chat_fetch/sw-get/"):
-        new_comment_dict = await get_data_from_server(f"{config.AI_Tuber_URL}/youtube_api/chat_fetch/get/?reset=true")
-        if new_comment_dict!=[]:
-            comment_len=len(new_comment_dict)
-            if config.comment_num < comment_len:
-                comment_len = config.comment_num
-            for i in range(comment_len):
-                if new_comment_dict[i]['superchat_bool']:
-                    new_comment_str += f"({new_comment_dict[i]['name']}:{new_comment_dict[i]['comment']} [Important Information: Received {new_comment_dict[i]['superchat_currency']}{new_comment_dict[i]['superchat_value']} super chat!!])"
-                new_comment_str += f"({new_comment_dict[i]['name']}:{new_comment_dict[i]['comment']})"
-        else:
-            new_comment_str = "None."
-    return new_comment_str
-
-async def get_youtube_viewer_counts():
-    viewer_count = await get_data_from_server(f"{config.AI_Tuber_URL}/youtube_api/viewer_count/")
-    return viewer_count
-
-async def get_youtube_subscriber_counts():
-    subscriber_counts = await get_data_from_server(f"{config.AI_Tuber_URL}/youtube_api/subscriber_count/")
-    return subscriber_counts
-
 async def get_mic_recorded_str():
     mic_recorded_list = await get_data_from_server(f"{config.AI_Tuber_URL}/mic_recorded_list/get/?reset=true")
     if mic_recorded_list == []:
@@ -131,6 +107,7 @@ async def get_mic_recorded_str():
 async def request_llm(prompt_name,variables,stream=False):
     current_time = int(time.time() * 1000)
     request_id = str(current_time)
+
     await post_data_from_server(URL=f"{config.GPT_Mangaer_URL}/LLM/request/?prompt_name={prompt_name}&request_id={request_id}&stream_mode={stream}",post_data={"variables" : variables})
     LLM_config.request_list.append({"request_id":request_id,"prompt_name":prompt_name,"stream":stream})
 
@@ -301,7 +278,13 @@ async def Mirai_15_model():
                 await asyncio.sleep(1)
                 continue
 
-
+            #タスクを追加する
+            tasks = []
+            for request in LLM_config.request_list:
+                #{"request_id":request_id,"prompt_name":prompt_name,"stream":stream}
+                tasks.append(request["prompt_name"](request["request_id"]))
+            #タスク完了を待機する
+            completed = await asyncio.gather(*tasks)
 
             #LLMの回答データの取得
             requests = await get_data_from_server(URL=f"{config.GPT_Mangaer_URL}/LLM/get/?reset=true")
