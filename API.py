@@ -26,6 +26,8 @@ class AI_Tuber_setting:
     interval_s:int = 3
     program_fin = False
     Showrunner_advice_prompt_name = ""
+    talk_log = []
+    summary_str = "None"
 
 class AnswerFinder_settings:
     tone_csv_directory = 'memory/example_tone'
@@ -64,6 +66,7 @@ class game_data:
     Game_info_path = "data/game_info"
     Game_talkLog= []
     Game_name = ""
+    summary_str = "None"
 
 class LLM_config:
     request_list = []
@@ -148,12 +151,36 @@ def Showrunner_advice_post(prompt_name:str="",mic_end: bool =False,AI_talk:bool 
         raise HTTPException(status_code=404, detail="Error decoding JSON.")
     
 @app.post("/LLM/request/post/", tags=["LLM"])
-def LLM_request_post(request_id:str,prompt_name:str,stream:bool):
-    LLM_config.request_list.append({"request_id":request_id,"prompt_name":prompt_name,"stream":stream})
+def LLM_request_post(prompt_name:str,stream:bool,variables:dict=None,):
+    """
+    LLMへの、問合せ要望をします
+    """
+    LLM_config.request_list.append({"prompt_name":prompt_name,"variables":variables,"stream":stream})
     return {'ok':True}
 
 @app.get("/LLM/request/get/", tags=["LLM"])
+def LLM_request_get(reset:bool=False):
+    """
+    LLMへの問合せ要望を取得します
+    """
+    result = LLM_config.request_list
+    if reset:
+        LLM_config.request_list = []
+    return result
+
+@app.post("/LLM/process/post/", tags=["LLM"])
+def LLM_request_post(request_id:str,prompt_name:str,stream:bool):
+    """
+    LLMから出力された結果の処理要望を行います
+    """
+    LLM_config.request_list.append({"request_id":request_id,"prompt_name":prompt_name,"stream":stream})
+    return {'ok':True}
+
+@app.get("/LLM/process/get/", tags=["LLM"])
 def LLM_request_get(del_request_id:str=None):
+    """
+    LLMから出力された結果の処理要望を取得します
+    """
     result = LLM_config.request_list
     if del_request_id != None:
         LLM_config.request_list = [d for d in LLM_config.request_list if d['request_id'] != del_request_id]
@@ -258,6 +285,43 @@ def Program_Fin_get_item():
     プログラム終了関数を取得
     """
     return AI_Tuber_setting.program_fin
+
+
+@app.post("/talk_log/post",tags=["AI Tuber"])
+def post_talk_log(talklog_list: dict):
+    """
+    トークログを投稿します
+    """
+    print(f"Talk_log: {talklog_list}")
+    AI_Tuber_setting.talk_log.append(talklog_list)
+    return AI_Tuber_setting.talk_log
+
+@app.get("/talk_log/get",tags=["AI Tuber"])
+def get_talk_log(reset:bool = False):
+    """
+    トークログを取得します
+    """
+    return_data = AI_Tuber_setting.talk_log
+    if reset:
+        AI_Tuber_setting.talk_log = []
+    return return_data
+
+@app.post("/summary/post",tags=["AI Tuber"])
+def post_summary(summary: str):
+    """
+    サマリーを投稿します
+    """
+    print(f"GameLog: {summary}")
+    AI_Tuber_setting.summary_str = summary
+    return AI_Tuber_setting.summary_str
+
+@app.get("/summary/get",tags=["AI Tuber"])
+def get_summary():
+    """
+    サマリーを取得します
+    """
+    return_data = AI_Tuber_setting.summary_str
+    return return_data
 
 @app.post("/mic_recorded_list/post/", tags=["Mic Settings"])
 def mic_recorded_dict_post(recorded_list: List[Any]):
@@ -531,18 +595,31 @@ def get_game_talk_log(reset:bool = False):
         game_data.Game_talkLog = []
     return return_data
 
-class GameLog(BaseModel):
-    name: str
-    text: str
-
 @app.post("/GameData/talk_log/post",tags=["Games"])
-def post_game_talk_log(gamelog: List[GameLog]):
+def post_game_talk_log(gamelog: dict):
     """
     ゲームトークログを投稿します
     """
     print(f"GameLog: {gamelog}")
-    game_data.Game_talkLog = gamelog
+    game_data.Game_talkLog.append(gamelog)
     return game_data.Game_talkLog
+
+@app.post("/GameData/summary/post",tags=["Games"])
+def post_game_summary(summary: str):
+    """
+    サマリーを投稿します
+    """
+    print(f"GameLog: {summary}")
+    game_data.summary_str = summary
+    return game_data.summary_str
+
+@app.get("/GameData/summary/get",tags=["Games"])
+def get_game_summary():
+    """
+    サマリーを取得します
+    """
+    return_data = game_data.summary_str
+    return return_data
 
 @app.get("/GameData/GameInfo/get",tags=["Games"])
 def get_game_info(game_name: str = ""):
