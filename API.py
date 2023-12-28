@@ -65,6 +65,9 @@ class game_data:
     Game_talkLog= []
     Game_name = ""
 
+class LLM_config:
+    request_list = []
+
 @app.post("/mic_mute/post/", tags=["Mic Settings"])
 def mic_post_item(mic_mute: bool = False):
     """
@@ -144,6 +147,17 @@ def Showrunner_advice_post(prompt_name:str="",mic_end: bool =False,AI_talk:bool 
     except json.JSONDecodeError:
         raise HTTPException(status_code=404, detail="Error decoding JSON.")
     
+@app.post("/LLM/request/post/", tags=["LLM"])
+def LLM_request_post(request_id:str,prompt_name:str,stream:bool):
+    LLM_config.request_list.append({"request_id":request_id,"prompt_name":prompt_name,"stream":stream})
+    return {'ok':True}
+
+@app.get("/LLM/request/get/", tags=["LLM"])
+def LLM_request_get(del_request_id:str=None):
+    result = LLM_config.request_list
+    if del_request_id != None:
+        LLM_config.request_list = [d for d in LLM_config.request_list if d['request_id'] != del_request_id]
+    return result
 
 @app.get("/tone_similar/get/", tags=["Vector Store"])
 def tone_similar_get(str_dialogue:str,top_n:int = 3):
