@@ -15,6 +15,10 @@ class LLM:
     completion_token_summary_trigger = {"gemini-pro":6144}
 
 async def process_airi_v17(request_id):
+    """
+    アイリ v17向け処理関数
+    Streamのみ対応
+    """
     content = ""
     done = False
     #切り取りマーカーリスト
