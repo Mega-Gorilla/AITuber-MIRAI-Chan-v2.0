@@ -12,3 +12,9 @@ faster-whisper
 pydub
 pyaudio
 aiohttp
+joblib
+
+langchain
+easyocr
+PyGetWindow
+PyAutoGUI
