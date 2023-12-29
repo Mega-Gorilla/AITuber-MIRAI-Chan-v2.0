@@ -80,12 +80,18 @@ async def process_airi_v17(request_id):
                 #ゲームプレイ中は、ゲームログ要約も実施
                 if requests.get(f"{config.AI_Tuber_URL}/GameName/get")!= "":
                     requests.post(f"{config.AI_Tuber_URL}/LLM/request/post/?prompt_name=game_logTosummary&stream=false")
+
     await asyncio.sleep(1)
     print("process_airi_v17 = Done.")
 
 async def process_talk_logTosummary(request_id):
     request = requests.get(f"{config.GPT_Mangaer_URL}/LLM/get/?reset_all=false&del_request_id={request_id}").json()
-    pass
+    summary = request[0]['content']
+    requests.post(f"{config.GPT_Mangaer_URL}/summary/post?summary={summary}")
+    await asyncio.sleep(1)
 
-async def process_game_logTosummary():
-    pass
+async def process_game_logTosummary(request_id):
+    request = requests.get(f"{config.GPT_Mangaer_URL}/LLM/get/?reset_all=false&del_request_id={request_id}").json()
+    summary = request[0]['content']
+    requests.post(f"{config.GPT_Mangaer_URL}/GameData/summary/post?summary={summary}")
+    await asyncio.sleep(1)
