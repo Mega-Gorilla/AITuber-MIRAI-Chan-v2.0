@@ -317,7 +317,15 @@ async def Mirai_15_model():
                 asyncio.create_task(LLM_config.process_function_map[request["prompt_name"]](request["request_id"]))
                 await get_data_from_server(f"{config.AI_Tuber_URL}/LLM/process/get/?del_request_id={request['request_id']}")
 
-            #----------------------------------
+            #通常問い合わせタスクについては、返答が返ってきているもののみタスク化
+            LLM_results_list = await get_data_from_server(f"{config.GPT_Mangaer_URL}/LLM/get/?reset=false") #LLM結果の取得
+            LLM_results_request_id_list = {d["request_id"] for d in LLM_results_list} #"request_idデータのみを抜き出し"
+            stream_false = [d for d in stream_false if d["request_id"] in LLM_results_request_id_list] #stream_falseよりレスポンスが返ってきていないものを消去
+            #LLMからレスポンスが返ってきているものについてはProcessタスクを実行する。
+            for request in  stream_false:
+                asyncio.create_task(LLM_config.process_function_map[request["prompt_name"]](request["request_id"]))
+                await get_data_from_server(f"{config.AI_Tuber_URL}/LLM/process/get/?del_request_id={request['request_id']}")
+            
             await asyncio.sleep(1)
             continue
             #LLMの回答データの取得
