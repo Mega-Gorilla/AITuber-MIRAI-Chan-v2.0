@@ -73,13 +73,12 @@ async def process_airi_v17(request_id):
             elif 'gemini' in model_name:
                 if request[0]['completion_tokens'] < LLM.completion_token_summary_trigger[model_name]:
                     break
-            else:
-                #要約フラグ作成
-                print("ログを要約します")
-                requests.post(f"{config.AI_Tuber_URL}/LLM/request/post/?prompt_name=talk_logTosummary&stream=false")
-                #ゲームプレイ中は、ゲームログ要約も実施
-                if requests.get(f"{config.AI_Tuber_URL}/GameName/get")!= "":
-                    requests.post(f"{config.AI_Tuber_URL}/LLM/request/post/?prompt_name=game_logTosummary&stream=false")
+            #要約フラグ作成
+            print("ログを要約します")
+            requests.post(f"{config.AI_Tuber_URL}/LLM/request/post/?prompt_name=talk_logTosummary&stream=false")
+            #ゲームプレイ中は、ゲームログ要約も実施
+            if requests.get(f"{config.AI_Tuber_URL}/GameName/get")!= "":
+                requests.post(f"{config.AI_Tuber_URL}/LLM/request/post/?prompt_name=game_logTosummary&stream=false")
 
     await asyncio.sleep(1)
     print("process_airi_v17 = Done.")
