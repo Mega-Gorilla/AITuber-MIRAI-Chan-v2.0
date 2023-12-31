@@ -6,6 +6,7 @@ class config:
     AI_Tuber_URL = "http://127.0.0.1:8001"
 
 async def request_talk_logTosummary():
+    #要約向けデータを取得
     talk_log = requests.get(f"{config.AI_Tuber_URL}/talk_log/get?reset=false")
     summary = requests.get(f"{config.AI_Tuber_URL}/summary/get")
     str_talk_log = ""
@@ -16,6 +17,7 @@ async def request_talk_logTosummary():
     return {"talk_log":talk_log,"old_talk_log":summary}
 
 async def request_game_logTosummary():
+    #ゲーム要約用データを取得
     talk_log = requests.get(f"{config.AI_Tuber_URL}/GameData/talk_log/get?reset=false")
     summary = requests.get(f"{config.AI_Tuber_URL}/GameData/summary/get")
     game_info = requests.get(f"{config.AI_Tuber_URL}/GameData/GameInfo/get")

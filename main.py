@@ -84,7 +84,8 @@ class LLM_config:
         "airi_v17": process_airi_v17,
         "airi_v17_gemini":process_airi_v17,
         "talk_logTosummary":process_talk_logTosummary,
-        "game_logTosummary":process_game_logTosummary
+        "game_logTosummary":process_game_logTosummary,
+        "Statement_to_animMotion_2":Statement_to_animMotion,
         }
 
 
@@ -265,7 +266,8 @@ async def Mirai_15_model():
     # 会話検索エンジンの初期化
     print("初期化中...")
     await reset_similarity_search() #類似検索の初期化
-    await get_data_from_server(URL=f"{config.GPT_Mangaer_URL}/LLM/get/?reset=true") #OpneAIの回答履歴を消去
+    await get_data_from_server(URL=f"{config.GPT_Mangaer_URL}/LLM/get/?reset=true") #回答履歴を消去
+
     Add_preset(1,config.voicevox_name,config.speaker_uuid,config.style_id) #ViceVoxの初期化
     stream = audio_stream_start()
     print("初期化完了")
@@ -292,14 +294,17 @@ async def Mirai_15_model():
             #-------- LLMへのリクエストリストを処理する
             request_list = await get_data_from_server(f"{config.AI_Tuber_URL}/LLM/request/get/?reset=true")
             if len(request_list) != 0:
-                for item in request_list:
-                    if item['variables'] != {}:
-                        #すでに変数が代入されているものはリクエストに追加。
-                        await request_llm(prompt_name=item['prompt_name'],variables=item['variables'],stream=item['stream'])
-                    else:
-                        #変数が代入されていない場合は、変数問合せ実行
-                        variables = await LLM_config.request_function_map[item['prompt_name']]
-                        await request_llm(prompt_name=item['prompt_name'],variables=variables,stream=item['stream'])
+                try:
+                    for item in request_list:
+                        if 'variables' in item:
+                            #すでに変数が代入されているものはリクエストに追加。
+                            await request_llm(prompt_name=item['prompt_name'],variables=item['variables'],stream=item['stream'])
+                        else:
+                            #変数が代入されていない場合は、変数問合せ実行
+                            variables = await LLM_config.request_function_map[item['prompt_name']]
+                            await request_llm(prompt_name=item['prompt_name'],variables=variables,stream=item['stream'])
+                except Exception as e:
+                    error("LLM リクエストエラー",e,{'request_list':request_list,'item':item})
 
             #-------- LLMへのプロセスリストを処理する
             process_list = await get_data_from_server(f"{config.AI_Tuber_URL}/LLM/process/get/")
@@ -318,9 +323,15 @@ async def Mirai_15_model():
                 await get_data_from_server(f"{config.AI_Tuber_URL}/LLM/process/get/?del_request_id={request['request_id']}")
 
             #通常問い合わせタスクについては、返答が返ってきているもののみタスク化
-            LLM_results_list = await get_data_from_server(f"{config.GPT_Mangaer_URL}/LLM/get/?reset=false") #LLM結果の取得
-            LLM_results_request_id_list = {d["request_id"] for d in LLM_results_list} #"request_idデータのみを抜き出し"
-            stream_false = [d for d in stream_false if d["request_id"] in LLM_results_request_id_list] #stream_falseよりレスポンスが返ってきていないものを消去
+            try:
+                LLM_results_list = await get_data_from_server(f"{config.GPT_Mangaer_URL}/LLM/get/?reset=false") #LLM結果の取得
+                if LLM_results_list == []:
+                    await asyncio.sleep(1)
+                    continue
+                LLM_results_request_id_list = {d["request_id"] for d in LLM_results_list} #"request_idデータのみを抜き出し"
+                stream_false = [d for d in stream_false if d["request_id"] in LLM_results_request_id_list] #stream_falseよりレスポンスが返ってきていないものを消去
+            except Exception as e:
+                error("Process タスク作成エラー",e,{"stream":False,"LLM_results_list":LLM_results_list,"LLM_results_request_id_list":LLM_results_request_id_list,"stream_false":stream_false})
             #LLMからレスポンスが返ってきているものについてはProcessタスクを実行する。
             for request in  stream_false:
                 asyncio.create_task(LLM_config.process_function_map[request["prompt_name"]](request["request_id"]))
