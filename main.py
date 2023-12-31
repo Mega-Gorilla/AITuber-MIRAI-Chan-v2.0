@@ -78,7 +78,9 @@ class LLM_config:
     #プロンプトごとの呼び出す関数を選択
     request_function_map = {
         "talk_logTosummary":request_talk_logTosummary,
-        "game_logTosummary":request_game_logTosummary
+        "game_logTosummary":request_game_logTosummary,
+        "airi_v17":request_airi_v17,
+        "airi_v17_gemini":request_airi_v17_gemini
         }
     process_function_map = {
         "airi_v17": process_airi_v17,
@@ -232,7 +234,8 @@ def process1_function():
             response = requests.get(f"{config.AI_Tuber_URL}/mic_mute/get/")     #マイク録音状態の確認
 
             # マイク録音開始の場合。
-            if response.text.lower() == 'false':           
+            if response.text.lower() == 'false':          
+                #requests.post(url=f"{config.AI_Tuber_URL}/StoT_process/post/",json=True) 
                 speech_to_text.process_stream()
                 print('mic end.')
                 speech_to_text.stop()
@@ -250,6 +253,7 @@ def process1_function():
                     f'{config.AI_Tuber_URL}/mic_recorded_list/post/',
                     json=text_data_list
                 )
+                requests.post(url=f"{config.AI_Tuber_URL}/StoT_process/post/",json=False)
             
             else:
                 if os.path.isfile(config.voicevox_save_path) and config.voicevox_save_path.endswith('.wav'):
@@ -275,14 +279,20 @@ async def Mirai_15_model():
     # YoutubeAPIが設定されているか確認
     await youtube_API_Check()
     
-    while await get_data_from_server(f"{config.AI_Tuber_URL}/Program_Fin_bool/get/") == False:
-        mirai_talkSW = await get_data_from_server(f"{config.AI_Tuber_URL}/AI_talk_bool/get/") 
+    while requests.get(url=f"{config.AI_Tuber_URL}/Program_Fin_bool/get/").json() == False:
+        mirai_talkSW = requests.get(url=f"{config.AI_Tuber_URL}/AI_talk_bool/get/").json()
 
         if mirai_talkSW:
             #---------------------------------- AIトークボタンを押したときの処理 ----------------------------------
             await post_data_from_server(URL=f"{config.AI_Tuber_URL}/AI_talk_bool/post/",post_data={'AI_talk': False}) #問合せフラグをFalseに
 
             # アイリ向けプロンプト問い合わせをリクエストする
+            while True:
+                #Voice To Textが終わるまで待つ
+                result = requests.get(url=f"{config.AI_Tuber_URL}/StoT_process/get/").json()
+                if result == False:
+                    break
+                await asyncio.sleep(0.2)
             mirai_prompt_variables = await get_mirai_prompt_variables()
 
             #LLM問合せリクエスト
@@ -292,7 +302,8 @@ async def Mirai_15_model():
         else:
             #---------------------------------- AI Talkボタンが押されていないときの処理 -------------------------------
             #-------- LLMへのリクエストリストを処理する
-            request_list = await get_data_from_server(f"{config.AI_Tuber_URL}/LLM/request/get/?reset=true")
+            #request_list = await get_data_from_server(f"{config.AI_Tuber_URL}/LLM/request/get/?reset=true")
+            request_list = requests.get(url=f"{config.AI_Tuber_URL}/LLM/request/get/?reset=true").json()
             if len(request_list) != 0:
                 try:
                     for item in request_list:
@@ -307,7 +318,7 @@ async def Mirai_15_model():
                     error("LLM リクエストエラー",e,{'request_list':request_list,'item':item})
 
             #-------- LLMへのプロセスリストを処理する
-            process_list = await get_data_from_server(f"{config.AI_Tuber_URL}/LLM/process/get/")
+            process_list = requests.get(url=f"{config.AI_Tuber_URL}/LLM/process/get/").json()
             if len(process_list) == 0:
                 #LLMリクエスト行われていないときはループ無視
                 await asyncio.sleep(1)
@@ -321,6 +332,7 @@ async def Mirai_15_model():
             for request in stream_true:
                 asyncio.create_task(LLM_config.process_function_map[request["prompt_name"]](request["request_id"]))
                 await get_data_from_server(f"{config.AI_Tuber_URL}/LLM/process/get/?del_request_id={request['request_id']}")
+                await asyncio.sleep(0)
 
             #通常問い合わせタスクについては、返答が返ってきているもののみタスク化
             try:
@@ -336,17 +348,18 @@ async def Mirai_15_model():
             for request in  stream_false:
                 asyncio.create_task(LLM_config.process_function_map[request["prompt_name"]](request["request_id"]))
                 await get_data_from_server(f"{config.AI_Tuber_URL}/LLM/process/get/?del_request_id={request['request_id']}")
+                await asyncio.sleep(0)
             
             await asyncio.sleep(1)
             continue
             #LLMの回答データの取得
-            requests = await get_data_from_server(URL=f"{config.GPT_Mangaer_URL}/LLM/get/?reset=true")
+            requestss = await get_data_from_server(URL=f"{config.GPT_Mangaer_URL}/LLM/get/?reset=true")
             message_list = []
             usage_data = {}
 
             # GPTレスポンスデータを取得する
-            if requests != []:
-                for request_data in requests:
+            if requestss != []:
+                for request_data in requestss:
                     try:
                         if 'choices' in request_data:
                             #OPENAI よりデータが返された時
