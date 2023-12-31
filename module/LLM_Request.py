@@ -133,7 +133,6 @@ async def request_airi_v17():
 
 
 async def request_airi_v17_gemini():
-    print("OKKKKK")
 
     mirai_prompt_name = 'airi_v17_gemini'
     #みらいプロンプトに必要な関数情報を取得
