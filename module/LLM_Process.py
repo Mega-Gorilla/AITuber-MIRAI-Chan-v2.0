@@ -29,7 +29,7 @@ class voicevox:
                  {'name':'anger','Speaking_Speed':1,'Voice_Pitch':-0.05,'Voice_Intonation':0.8},
                  {'name':'disgust','Speaking_Speed':1,'Voice_Pitch':-0.1,'Voice_Intonation':0.6},
                  {'name':'fear','Speaking_Speed':1.2,'Voice_Pitch':0.08,'Voice_Intonation':1.2},
-                 {'name':'happy','Speaking_Speed':1,'Voice_Pitch':0.05,'Voice_Intonation':1.7},
+                 {'name':'happy','Speaking_Speed':1,'Voice_Pitch':0.05,'Voice_Intonation':1.5},
                  {'name':'sad','Speaking_Speed':0.9,'Voice_Pitch':0.09,'Voice_Intonation':1.3},
                  {'name':'surprise','Speaking_Speed':1,'Voice_Pitch':0.05,'Voice_Intonation':1.1}]
 
@@ -41,7 +41,7 @@ async def process_airi_v17(request_id):
     content = ""
     done = False
     #切り取りマーカーリスト
-    markers = [["# Organize Your Thoughts:","#Result:"],["# Organize Your Thoughts:","# Result:"],["emotion:","facial expression:"],["facial expression:","gesture:"],["gesture:","statements:"],["statements:","emotion:"],["statements:","--<Done>--"]]
+    markers = [["# Organize Your Thoughts:","#Result:"],["# Organize Your Thoughts:","# Result:"],["emotion:","facial expression:"],["facial expression:","statements:"],["statements:","gesture:"],["gesture:","emotion:"],["gesture:","--<Done>--"]]
     content_list = []
     
     while True:
