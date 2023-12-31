@@ -17,6 +17,7 @@ Youtube_comments = []
 
 class mic_setting:
     mic_recording_bool = False
+    processing = False
 
 class record_data:
     recorded_list = []
@@ -80,6 +81,8 @@ def mic_post_item(mic_mute: bool = False):
     - False : ON
     """
     mic_setting.mic_recording_bool = mic_mute
+    if mic_mute:
+        mic_setting.processing=True
     return mic_setting.mic_recording_bool
 
 @app.get("/mic_mute/get/", tags=["Mic Settings"])
@@ -88,6 +91,23 @@ def mic_get_item():
     マイクの音声認識 状態確認
     """
     return mic_setting.mic_recording_bool
+
+@app.post("/StoT_process/post/", tags=["Mic Settings"])
+def mic_post_item(process: bool = False):
+    """
+    音声を文字化している:
+    - True : 文字化中
+    - False : 文字化終了
+    """
+    mic_setting.processing = process
+    return mic_setting.processing
+
+@app.get("/StoT_process/get/", tags=["Mic Settings"])
+def mic_get_item():
+    """
+    Voice To Text実行状況取得
+    """
+    return mic_setting.processing
 
 @app.post("/AI_talk_bool/post/", tags=["AI Tuber"])
 def AI_talk_post_item(AI_talk: bool = False):
