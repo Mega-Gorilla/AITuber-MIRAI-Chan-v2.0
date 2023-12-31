@@ -44,7 +44,7 @@ class config:
     game_logs_temp = []
 
     #みらい1.5 プロンプト
-    mirai_prompt_name = 'airi_v17'
+    mirai_prompt_name = 'airi_v17_gemini'
     talk_logs = []
     talk_log_temp = []
     viewer_count = 0
@@ -121,9 +121,9 @@ async def get_mic_recorded_str():
 async def request_llm(prompt_name,variables,stream=False):
     current_time = int(time.time() * 1000)
     request_id = str(current_time)
-
-    await post_data_from_server(URL=f"{config.GPT_Mangaer_URL}/LLM/request/?prompt_name={prompt_name}&request_id={request_id}&stream_mode={stream}",post_data={"variables" : variables})
-    await post_data_from_server(URL=f"{config.AI_Tuber_URL}/LLM/process/post/?request_id={request_id}&prompt_name={prompt_name}&stream={stream}")
+    
+    requests.post(f"{config.GPT_Mangaer_URL}/LLM/request/?prompt_name={prompt_name}&request_id={request_id}&stream_mode={stream}",json={"variables" : variables})
+    requests.post(f"{config.AI_Tuber_URL}/LLM/process/post/?request_id={request_id}&prompt_name={prompt_name}&stream={stream}")
 
     print("\n------------------Prompt Data------------------")
     for key,value in variables.items():
@@ -169,7 +169,7 @@ async def get_mirai_prompt_variables():
     
     #Speech to Text文章を取得
     mic_recorded_str = await get_mic_recorded_str()
-    await post_data_from_server(URL=f"{config.AI_Tuber_URL}/talk_log/post",post_data={"博士":mic_recorded_str})
+    requests.post(f"{config.AI_Tuber_URL}/talk_log/post",json={"博士":mic_recorded_str})
 
     #類似会話例を取得
     serch_tone_word = mic_recorded_str.split('\n')[0]
@@ -284,7 +284,7 @@ async def Mirai_15_model():
 
         if mirai_talkSW:
             #---------------------------------- AIトークボタンを押したときの処理 ----------------------------------
-            await post_data_from_server(URL=f"{config.AI_Tuber_URL}/AI_talk_bool/post/",post_data={'AI_talk': False}) #問合せフラグをFalseに
+            requests.post(f"{config.AI_Tuber_URL}/AI_talk_bool/post/",json={'AI_talk': False})#問合せフラグをFalseに
 
             # アイリ向けプロンプト問い合わせをリクエストする
             while True:
@@ -293,11 +293,8 @@ async def Mirai_15_model():
                 if result == False:
                     break
                 await asyncio.sleep(0.2)
-            mirai_prompt_variables = await get_mirai_prompt_variables()
-
             #LLM問合せリクエスト
-            await post_data_from_server(f"{config.AI_Tuber_URL}/LLM/request/post/?prompt_name={config.mirai_prompt_name}&stream=true",mirai_prompt_variables)
-            #await request_llm(prompt_name=config.mirai_prompt_name,variables=mirai_prompt_variables,stream=True)
+            requests.post(f"{config.AI_Tuber_URL}/LLM/request/post/?prompt_name={config.mirai_prompt_name}&stream=true")
 
         else:
             #---------------------------------- AI Talkボタンが押されていないときの処理 -------------------------------
@@ -307,12 +304,12 @@ async def Mirai_15_model():
             if len(request_list) != 0:
                 try:
                     for item in request_list:
-                        if 'variables' in item:
+                        if 'variables' in item and item['variables']!=None:
                             #すでに変数が代入されているものはリクエストに追加。
                             await request_llm(prompt_name=item['prompt_name'],variables=item['variables'],stream=item['stream'])
                         else:
                             #変数が代入されていない場合は、変数問合せ実行
-                            variables = await LLM_config.request_function_map[item['prompt_name']]
+                            variables = await LLM_config.request_function_map[item['prompt_name']]()
                             await request_llm(prompt_name=item['prompt_name'],variables=variables,stream=item['stream'])
                 except Exception as e:
                     error("LLM リクエストエラー",e,{'request_list':request_list,'item':item})
@@ -331,7 +328,7 @@ async def Mirai_15_model():
             #Streamタスクについては即時タスク化
             for request in stream_true:
                 asyncio.create_task(LLM_config.process_function_map[request["prompt_name"]](request["request_id"]))
-                await get_data_from_server(f"{config.AI_Tuber_URL}/LLM/process/get/?del_request_id={request['request_id']}")
+                requests.get(f"{config.AI_Tuber_URL}/LLM/process/get/?del_request_id={request['request_id']}")
                 await asyncio.sleep(0)
 
             #通常問い合わせタスクについては、返答が返ってきているもののみタスク化
@@ -347,7 +344,7 @@ async def Mirai_15_model():
             #LLMからレスポンスが返ってきているものについてはProcessタスクを実行する。
             for request in  stream_false:
                 asyncio.create_task(LLM_config.process_function_map[request["prompt_name"]](request["request_id"]))
-                await get_data_from_server(f"{config.AI_Tuber_URL}/LLM/process/get/?del_request_id={request['request_id']}")
+                requests.get(f"{config.AI_Tuber_URL}/LLM/process/get/?del_request_id={request['request_id']}")
                 await asyncio.sleep(0)
             
             await asyncio.sleep(1)
