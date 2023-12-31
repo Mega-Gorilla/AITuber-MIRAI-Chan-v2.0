@@ -70,6 +70,7 @@ class game_data:
 
 class LLM_config:
     request_list = []
+    process_list = []
 
 @app.post("/mic_mute/post/", tags=["Mic Settings"])
 def mic_post_item(mic_mute: bool = False):
@@ -155,6 +156,8 @@ def LLM_request_post(prompt_name:str,stream:bool,variables:dict=None,):
     """
     LLMへの、問合せ要望をします
     """
+    print("-------------------------------------")
+    print()
     LLM_config.request_list.append({"prompt_name":prompt_name,"variables":variables,"stream":stream})
     return {'ok':True}
 
@@ -169,21 +172,21 @@ def LLM_request_get(reset:bool=False):
     return result
 
 @app.post("/LLM/process/post/", tags=["LLM"])
-def LLM_request_post(request_id:str,prompt_name:str,stream:bool):
+def LLM_process_post(request_id:str,prompt_name:str,stream:bool):
     """
     LLMから出力された結果の処理要望を行います
     """
-    LLM_config.request_list.append({"request_id":request_id,"prompt_name":prompt_name,"stream":stream})
+    LLM_config.process_list.append({"request_id":request_id,"prompt_name":prompt_name,"stream":stream})
     return {'ok':True}
 
 @app.get("/LLM/process/get/", tags=["LLM"])
-def LLM_request_get(del_request_id:str=None):
+def LLM_process_get(del_request_id:str=None):
     """
     LLMから出力された結果の処理要望を取得します
     """
-    result = LLM_config.request_list
+    result = LLM_config.process_list
     if del_request_id != None:
-        LLM_config.request_list = [d for d in LLM_config.request_list if d['request_id'] != del_request_id]
+        LLM_config.process_list = [d for d in LLM_config.process_list if d['request_id'] != del_request_id]
     return result
 
 @app.get("/tone_similar/get/", tags=["Vector Store"])
