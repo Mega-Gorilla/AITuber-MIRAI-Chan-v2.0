@@ -81,8 +81,6 @@ def mic_post_item(mic_mute: bool = False):
     - False : ON
     """
     mic_setting.mic_recording_bool = mic_mute
-    if mic_mute:
-        mic_setting.processing=True
     return mic_setting.mic_recording_bool
 
 @app.get("/mic_mute/get/", tags=["Mic Settings"])
@@ -157,6 +155,7 @@ def Showrunner_advice_post(prompt_name:str="",mic_end: bool =False,AI_talk:bool 
     
     if mic_end:
         mic_setting.mic_recording_bool = True
+        mic_setting.processing = True
     
     try:
         with open('data/showrunner_advice_list.json', 'r', encoding='utf-8') as file:
