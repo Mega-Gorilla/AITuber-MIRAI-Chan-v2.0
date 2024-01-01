@@ -29,6 +29,8 @@ class AI_Tuber_setting:
     Showrunner_advice_prompt_name = ""
     talk_log = []
     summary_str = "None"
+    summary_process = False
+    summary_game_process = False
 
 class AnswerFinder_settings:
     tone_csv_directory = 'memory/example_tone'
@@ -106,6 +108,26 @@ def mic_get_item():
     Voice To Text実行状況取得
     """
     return mic_setting.processing
+
+@app.post("/mic_recorded_list/post/", tags=["Mic Settings"])
+def mic_recorded_dict_post(recorded_list: List[Any]):
+    """
+    マイク音声認識関数に文字列を追加
+    - List[Any]: ["こんにちわ"]
+    """
+    record_data.recorded_list.append(recorded_list)
+    return record_data.recorded_list
+
+@app.get("/mic_recorded_list/get/", tags=["Mic Settings"])
+def mic_recorded_dict_get(reset: bool = False):
+    """
+    マイク音声認識文字列を取得
+    - reset にて、配列を初期化する
+    """
+    responce_data = record_data.recorded_list
+    if reset:
+        record_data.recorded_list = []
+    return responce_data
 
 @app.post("/AI_talk_bool/post/", tags=["AI Tuber"])
 def AI_talk_post_item(AI_talk: bool = False):
@@ -345,25 +367,25 @@ def get_summary():
     return_data = AI_Tuber_setting.summary_str
     return return_data
 
-@app.post("/mic_recorded_list/post/", tags=["Mic Settings"])
-def mic_recorded_dict_post(recorded_list: List[Any]):
+@app.post("/summary_process/post/", tags=["AI Tuber"])
+def mic_post_item(summary_process: bool = None,summray_game_process:bool =None):
     """
-    マイク音声認識関数に文字列を追加
-    - List[Any]: ["こんにちわ"]
+    要約実行中 ON/OFF:
+    - True : 要約中
+    - False : 要約終了
     """
-    record_data.recorded_list.append(recorded_list)
-    return record_data.recorded_list
+    if summary_process != None:
+        AI_Tuber_setting.summary_process = summary_process
+    if summray_game_process != None:
+        AI_Tuber_setting.summary_game_process = summray_game_process
+    return {'summary_talk':summary_process,'summary_game':summray_game_process}
 
-@app.get("/mic_recorded_list/get/", tags=["Mic Settings"])
-def mic_recorded_dict_get(reset: bool = False):
+@app.get("/summary_process/get/", tags=["AI Tuber"])
+def mic_get_item():
     """
-    マイク音声認識文字列を取得
-    - reset にて、配列を初期化する
+    要約状態確認
     """
-    responce_data = record_data.recorded_list
-    if reset:
-        record_data.recorded_list = []
-    return responce_data
+    return {'summary_talk':AI_Tuber_setting.summary_process,'summary_game':AI_Tuber_setting.summary_game_process}
 
 @app.post("/youtube_api/set_stream_url/", tags=["Youtube API"])
 def set_stream_url(url:str):
