@@ -36,6 +36,7 @@ async def request_game_logTosummary():
     return {"game_log":game_log_str,"old_game_log":summary,"game_info":game_info}
 
 async def get_mic_recorded_str():
+    #マイク文字列の取得
     mic_recorded_list = requests.get(f"{config.AI_Tuber_URL}/mic_recorded_list/get/?reset=true").json()
     if mic_recorded_list == []:
         result = ""
@@ -74,18 +75,22 @@ async def request_airi_v17():
     
     #Speech to Text文章を取得
     mic_recorded_str = await get_mic_recorded_str()
-    requests.post(f"{config.AI_Tuber_URL}/talk_log/post",json={"博士":mic_recorded_str})
+    if mic_recorded_str != "":
+        requests.post(f"{config.AI_Tuber_URL}/talk_log/post",json={"博士":mic_recorded_str})
 
+    if mic_recorded_str != "":
     #類似会話例を取得
-    serch_tone_word = mic_recorded_str.split('\n')[0]
-    streamer_tone_dict = requests.get(f"{config.AI_Tuber_URL}/tone_similar/get/?str_dialogue={serch_tone_word}&top_n={airi_v17_config.tone_example_top_n}").json()
-    streamer_tone = ''
-    for d in streamer_tone_dict:
-        if 'ok' in d:
-            if d['ok']==False:
-                streamer_tone = 'None'
-        elif 'text' in d:
-            streamer_tone+=d['text']+"\n"
+        serch_tone_word = mic_recorded_str.split('\n')[0]
+        streamer_tone_dict = requests.get(f"{config.AI_Tuber_URL}/tone_similar/get/?str_dialogue={serch_tone_word}&top_n={airi_v17_config.tone_example_top_n}").json()
+        streamer_tone = ''
+        for d in streamer_tone_dict:
+            if 'ok' in d:
+                if d['ok']==False:
+                    streamer_tone = 'None'
+            elif 'text' in d:
+                streamer_tone+=d['text']+"\n"
+    else:
+        streamer_tone = ""
 
     #会話ログを作成
     talk_log = ""
@@ -162,7 +167,8 @@ async def request_airi_v17_gemini():
     
     #Speech to Text文章を取得
     mic_recorded_str = await get_mic_recorded_str()
-    requests.post(f"{config.AI_Tuber_URL}/talk_log/post",json={"博士":mic_recorded_str})
+    if mic_recorded_str != "":
+        requests.post(f"{config.AI_Tuber_URL}/talk_log/post",json={"博士":mic_recorded_str})
 
     #会話ログを作成
     talk_log = ""
