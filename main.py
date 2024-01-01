@@ -22,7 +22,7 @@ class config:
     AI_Tuber_URL = "http://127.0.0.1:8001"
 
     #みらい1.5 プロンプト
-    mirai_prompt_name = 'airi_v17_gemini'
+    mirai_prompt_name = 'airi_v17'
     viewer_count = 0
     subscriber_count = 0
 
@@ -55,7 +55,7 @@ class LLM_config:
     request_function_map = {
         "talk_logTosummary":request_talk_logTosummary,
         "game_logTosummary":request_game_logTosummary,
-        "airi_v17":request_airi_v17,
+        "airi_v17":request_airi_v17_2,
         "airi_v17_gemini":request_airi_v17_gemini
         }
     process_function_map = {
@@ -65,7 +65,6 @@ class LLM_config:
         "game_logTosummary":process_game_logTosummary,
         "Statement_to_animMotion_2":Statement_to_animMotion,
         }
-
 
 console = Console()
         
@@ -78,7 +77,7 @@ async def youtube_counter_initialize():
         config.subscriber_count = subscriber_count['subscriber_count']
 
 async def youtube_API_Check():
-    commnet_url = await get_data_from_server(f"{config.AI_Tuber_URL}/youtube_api/get_stream_url/")
+    commnet_url = requests.get(f"{config.AI_Tuber_URL}/youtube_api/get_stream_url/").json()
     if commnet_url == "":
         warning_message("Stream URLが設定されていません。Youtube APIが利用できません!")
     else:
@@ -87,7 +86,7 @@ async def youtube_API_Check():
         await post_data_from_server(f"{config.AI_Tuber_URL}/youtube_api/chat_fetch/sw/?chat_fecth_sw=true")
 
 async def get_mic_recorded_str():
-    mic_recorded_list = await get_data_from_server(f"{config.AI_Tuber_URL}/mic_recorded_list/get/?reset=true")
+    mic_recorded_list = requests.get(f"{config.AI_Tuber_URL}/mic_recorded_list/get/?reset=true").json()
     if mic_recorded_list == []:
         result = ""
     else:
@@ -100,11 +99,11 @@ async def request_llm(prompt_name,variables,stream=False):
     
     requests.post(f"{config.GPT_Mangaer_URL}/LLM/request/?prompt_name={prompt_name}&request_id={request_id}&stream_mode={stream}",json={"variables" : variables})
     requests.post(f"{config.AI_Tuber_URL}/LLM/process/post/?request_id={request_id}&prompt_name={prompt_name}&stream={stream}")
-
-    print("\n------------------Prompt Data------------------")
+    console.print("\n------------------Prompt Data------------------",style='blue')
+    console.print(prompt_name,style='yellow')
     for key,value in variables.items():
-        print(f"{key}: {value}")
-    print("------------------ END ------------------")
+        console.print(f"{key}: {value}",style='green')
+    console.print("------------------END------------------\n",style='blue')
 
     return request_id
 
@@ -142,6 +141,7 @@ def process1_function():
                     f'{config.AI_Tuber_URL}/mic_recorded_list/post/',
                     json=text_data_list
                 )
+                print("文字化完了")
                 requests.post(url=f"{config.AI_Tuber_URL}/StoT_process/post/",json=False)
             
             else:
@@ -159,7 +159,7 @@ async def Mirai_15_model():
     # 会話検索エンジンの初期化
     print("初期化中...")
     await reset_similarity_search() #類似検索の初期化
-    await get_data_from_server(URL=f"{config.GPT_Mangaer_URL}/LLM/get/?reset=true") #回答履歴を消去
+    requests.get(f"{config.GPT_Mangaer_URL}/LLM/get/?reset=true")
     Add_preset(1,config.voicevox_name,config.speaker_uuid,config.style_id) #ViceVoxの初期化
     print("初期化完了")
 
@@ -220,7 +220,7 @@ async def Mirai_15_model():
 
             #通常問い合わせタスクについては、返答が返ってきているもののみタスク化
             try:
-                LLM_results_list = await get_data_from_server(f"{config.GPT_Mangaer_URL}/LLM/get/?reset=false") #LLM結果の取得
+                LLM_results_list = requests.get(f"{config.GPT_Mangaer_URL}/LLM/get/?reset=false").json() #LLM結果の取得
                 if LLM_results_list == []:
                     await asyncio.sleep(1)
                     continue
