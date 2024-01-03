@@ -350,14 +350,18 @@ def get_talk_log(reset:bool = False):
         AI_Tuber_setting.talk_log = []
     return return_data
 
+class SummaryModel(BaseModel):
+    summary: str
+
 @app.post("/summary/post",tags=["AI Tuber"])
-def post_summary(summary: str):
+def post_summary(summary_data: SummaryModel):
     """
     サマリーを投稿します
     """
-    print(f"GameLog: {summary}")
+    summary = summary_data.summary
+    print(f"Summary: {summary}")
     AI_Tuber_setting.summary_str = summary
-    return AI_Tuber_setting.summary_str
+    return {"summary": AI_Tuber_setting.summary_str}
 
 @app.get("/summary/get",tags=["AI Tuber"])
 def get_summary():
@@ -649,13 +653,14 @@ def post_game_talk_log(gamelog: dict):
     return game_data.Game_talkLog
 
 @app.post("/GameData/summary/post",tags=["Games"])
-def post_game_summary(summary: str):
+def post_game_summary(summary_data: SummaryModel):
     """
     サマリーを投稿します
     """
-    print(f"GameLog: {summary}")
+    summary = summary_data.summary
+    print(f"GameSummary: {summary}")
     game_data.summary_str = summary
-    return game_data.summary_str
+    return {"summary": AI_Tuber_setting.summary_str}
 
 @app.get("/GameData/summary/get",tags=["Games"])
 def get_game_summary():
