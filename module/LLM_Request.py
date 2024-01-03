@@ -21,19 +21,20 @@ async def request_talk_logTosummary():
         key, value = list(d.items())[0]
         str_talk_log += f"{key} -> {value}\n"
     await asyncio.sleep(0)
-    return {"talk_log":talk_log,"old_talk_log":summary}
+    return {"talk_log":str_talk_log,"old_talk_log":summary}
 
 async def request_game_logTosummary():
     #ゲーム要約用データを取得
-    talk_log = requests.get(f"{config.AI_Tuber_URL}/GameData/talk_log/get?reset=false").json()
-    summary = requests.get(f"{config.AI_Tuber_URL}/GameData/summary/get").json()
+    game_log = requests.get(f"{config.AI_Tuber_URL}/GameData/talk_log/get?reset=false").json()
+    game_summary = requests.get(f"{config.AI_Tuber_URL}/GameData/summary/get").json()
     game_info = requests.get(f"{config.AI_Tuber_URL}/GameData/GameInfo/get").json()
     game_log_str = ""
-    for d in talk_log:
-        key, value = list(d.items())[0]
+    for d in game_log:
+        key = d["name"]
+        value = d["text"]
         game_log_str += f"{key} -> {value}\n"
     await asyncio.sleep(0)
-    return {"game_log":game_log_str,"old_game_log":summary,"game_info":game_info}
+    return {"game_log":game_log_str,"old_game_log":game_summary,"game_info":game_info}
 
 async def get_mic_recorded_str():
     #マイク文字列の取得
@@ -137,9 +138,9 @@ async def request_airi_v17():
     return mirai_prompt_variables
 
 
-async def request_airi_v17_2():
-
-    mirai_prompt_name = 'airi_v17'
+async def request_airi_v18():
+    
+    mirai_prompt_name = 'airi_v18'
     #みらいプロンプトに必要な関数情報を取得
     mirai_prompt_data = requests.get(f"{config.GPT_Mangaer_URL}/prompts-get/lookup_prompt_by_name?prompt_name={mirai_prompt_name}").json()
     mirai_prompt_variables = mirai_prompt_data['variables']
