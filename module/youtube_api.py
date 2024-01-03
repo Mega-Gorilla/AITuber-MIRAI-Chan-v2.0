@@ -1,4 +1,4 @@
-from module.server_requests import *
+import requests
 
 class config:
     AI_Tuber_URL = "http://127.0.0.1:8001"
@@ -8,8 +8,9 @@ class config:
 async def get_youtube_comments_str():
     #Youtubeデータ取得
     new_comment_str = ""
-    if await get_data_from_server(f"{config.AI_Tuber_URL}/youtube_api/chat_fetch/sw-get/"):
-        new_comment_dict = await get_data_from_server(f"{config.AI_Tuber_URL}/youtube_api/chat_fetch/get/?reset=true")
+    chat_fetch = requests.get(f"{config.AI_Tuber_URL}/youtube_api/chat_fetch/sw-get/").json()
+    if chat_fetch:
+        new_comment_dict = requests.get(f"{config.AI_Tuber_URL}/youtube_api/chat_fetch/get/?reset=true").json()
         if new_comment_dict!=[]:
             comment_len=len(new_comment_dict)
             if config.comment_num < comment_len:
@@ -23,9 +24,9 @@ async def get_youtube_comments_str():
     return new_comment_str
 
 async def get_youtube_viewer_counts():
-    viewer_count = await get_data_from_server(f"{config.AI_Tuber_URL}/youtube_api/viewer_count/")
+    viewer_count = requests.get(f"{config.AI_Tuber_URL}/youtube_api/viewer_count/").json()
     return viewer_count
 
 async def get_youtube_subscriber_counts():
-    subscriber_counts = await get_data_from_server(f"{config.AI_Tuber_URL}/youtube_api/subscriber_count/")
+    subscriber_counts = requests.get(f"{config.AI_Tuber_URL}/youtube_api/subscriber_count/").json()
     return subscriber_counts
