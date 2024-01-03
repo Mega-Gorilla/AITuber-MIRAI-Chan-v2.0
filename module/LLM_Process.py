@@ -17,7 +17,7 @@ class config:
     motion_list_top_n = 4
 
 class LLM:
-    total_token_summary_trigger = {"gpt-4-1106-preview":3171,"gpt-4":6143}
+    total_token_summary_trigger = {"gpt-4-1106-preview":3171,"gpt-4":6143} #"gpt-4-1106-preview":3171,"gpt-4":6143
     completion_token_summary_trigger = {"gemini-pro":6144}
 
 class voicevox:
@@ -25,13 +25,13 @@ class voicevox:
     voicevox_name = 'AIRI'
     speaker_uuid = "9f3ee141-26ad-437e-97bd-d22298d02ad2"
     style_id = 20
-    parameters = [{'name':'neutral','Speaking_Speed':1,'Voice_Pitch':0,'Voice_Intonation':1},
-                 {'name':'anger','Speaking_Speed':1,'Voice_Pitch':-0.05,'Voice_Intonation':0.8},
-                 {'name':'disgust','Speaking_Speed':1,'Voice_Pitch':-0.1,'Voice_Intonation':0.6},
-                 {'name':'fear','Speaking_Speed':1.2,'Voice_Pitch':0.08,'Voice_Intonation':1.2},
-                 {'name':'happy','Speaking_Speed':1,'Voice_Pitch':0.05,'Voice_Intonation':1.5},
+    parameters = [{'name':'neutral','Speaking_Speed':1.2,'Voice_Pitch':0,'Voice_Intonation':1},
+                 {'name':'anger','Speaking_Speed':1.2,'Voice_Pitch':-0.05,'Voice_Intonation':0.8},
+                 {'name':'disgust','Speaking_Speed':1.2,'Voice_Pitch':-0.1,'Voice_Intonation':0.6},
+                 {'name':'fear','Speaking_Speed':1.4,'Voice_Pitch':0.08,'Voice_Intonation':1.2},
+                 {'name':'happy','Speaking_Speed':1.2,'Voice_Pitch':0.05,'Voice_Intonation':1.5},
                  {'name':'sad','Speaking_Speed':0.9,'Voice_Pitch':0.09,'Voice_Intonation':1.3},
-                 {'name':'surprise','Speaking_Speed':1,'Voice_Pitch':0.05,'Voice_Intonation':1.1}]
+                 {'name':'surprise','Speaking_Speed':1.2,'Voice_Pitch':0.05,'Voice_Intonation':1.1}]
 
 async def process_airi_v17(request_id):
     """
@@ -74,6 +74,7 @@ async def process_airi_v17(request_id):
                                     if param['name'] == emotion_name:
                                         #VoiceVoxプリセット切り替え
                                         update_preset(1,voicevox.voicevox_name,voicevox.speaker_uuid,voicevox.style_id,param['Speaking_Speed'],param['Voice_Pitch'],param['Voice_Intonation'])
+                    await asyncio.sleep(0)
                 
                 if start_marker == "facial expression:":
                     expression_list = ['neutral', 'joy', 'angry', 'fun']
@@ -84,6 +85,7 @@ async def process_airi_v17(request_id):
                             console.print("<Unity> 表情変更: ",style='blue',end='')
                             print(expression_name)
                             requests.post(url=f"{config.AI_Tuber_URL}/Unity/animation/post/",json={"VRM_expression": expression_name})
+                    await asyncio.sleep(0)
 
                 if start_marker == 'gesture:':
                     #ジェスチャー類似検索実施
@@ -103,6 +105,7 @@ async def process_airi_v17(request_id):
                         #モーション選択をリクエスト
                         request_data = {"motion_str":item,"anim_list":anim_list}
                         requests.post(url=f"{config.AI_Tuber_URL}/LLM/request/post/?prompt_name=Statement_to_animMotion_2&stream=false",json=request_data)
+                    await asyncio.sleep(0)
                             
 
                 if start_marker == "statements:":
@@ -116,6 +119,7 @@ async def process_airi_v17(request_id):
 
                     #会話ログへの追加
                     requests.post(url=f"{config.AI_Tuber_URL}/talk_log/post",json={"アイリ":item})
+                    await asyncio.sleep(0)
 
                 content_list.append({start_marker:item})
                 #表示した内容を受信したデータから消去する
@@ -148,9 +152,9 @@ async def process_airi_v17(request_id):
                     break
 
             process_dict = requests.get(f"{config.AI_Tuber_URL}/summary_process/get/").json()
-            if process_dict['summary_talk'] != True and process_dict['summary_game'] != True :
+            if process_dict['summary_talk'] == True and process_dict['summary_game'] == True :
                 #要約中の場合
-                console.print("--- <要約中のため要約をパスしました> ----",style='yellow')
+                console.print(f"--- <要約中のため要約をパスしました> ----",style='yellow')
                 break
 
             #要約フラグ作成
@@ -174,19 +178,21 @@ async def Statement_to_animMotion(request_id):
 
 async def process_talk_logTosummary(request_id):
     #要約が受信された場合
-    print("要約を変更しました")
     request = requests.get(f"{config.GPT_Mangaer_URL}/LLM/get/?reset_all=false&del_request_id={request_id}").json()
     summary = request[0]['content']
-    requests.post(f"{config.GPT_Mangaer_URL}/summary/post?summary={summary}")
+    console.print("--- <会話ログを要約しました> ----",style='yellow')
+    print(summary)
+    requests.post(f"{config.AI_Tuber_URL}/summary/post",json={"summary":summary})
     requests.post(f"{config.AI_Tuber_URL}/summary_process/post/?summary_process=false")
     
     await asyncio.sleep(1)
 
 async def process_game_logTosummary(request_id):
     #ゲームログの要約が受信した場合
-    print("ゲーム要約を変更しました")
     request = requests.get(f"{config.GPT_Mangaer_URL}/LLM/get/?reset_all=false&del_request_id={request_id}").json()
     summary = request[0]['content']
-    requests.post(f"{config.GPT_Mangaer_URL}/GameData/summary/post?summary={summary}")
+    console.print("--- <ゲーム要約を要約しました> ----",style='yellow')
+    print(summary)
+    requests.post(f"{config.AI_Tuber_URL}/GameData/summary/post",json={"summary":summary})
     requests.post(f"{config.AI_Tuber_URL}/summary_process/post/?summray_game_process=false")
     await asyncio.sleep(1)
