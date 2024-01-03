@@ -22,7 +22,7 @@ class config:
     AI_Tuber_URL = "http://127.0.0.1:8001"
 
     #みらい1.5 プロンプト
-    mirai_prompt_name = 'airi_v17'
+    mirai_prompt_name = 'airi_v18'
     viewer_count = 0
     subscriber_count = 0
 
@@ -55,11 +55,13 @@ class LLM_config:
     request_function_map = {
         "talk_logTosummary":request_talk_logTosummary,
         "game_logTosummary":request_game_logTosummary,
-        "airi_v17":request_airi_v17_2,
+        "airi_v17":request_airi_v17,
+        "airi_v18":request_airi_v18,
         "airi_v17_gemini":request_airi_v17_gemini
         }
     process_function_map = {
         "airi_v17": process_airi_v17,
+        "airi_v18": process_airi_v17,
         "airi_v17_gemini":process_airi_v17,
         "talk_logTosummary":process_talk_logTosummary,
         "game_logTosummary":process_game_logTosummary,
