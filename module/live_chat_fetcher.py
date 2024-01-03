@@ -33,11 +33,22 @@ def get_channel_id(URL,API_key):
     url = f'https://www.googleapis.com/youtube/v3/videos?id={video_id}&key={API_key}&part=snippet'
 
     # APIリクエストを送信してレスポンスを取得
-    response = requests.get(url)
-    data = response.json()
+    response = requests.get(url).json()
 
     # チャンネルIDを取得
-    channel_id = data['items'][0]['snippet']['channelId']
+    print(response)
+    """
+    {
+    'error': {
+        'code': 400,
+        'message': 'API key not valid. Please pass a valid API key.',
+        'errors': [{'message': 'API key not valid. Please pass a valid API key.', 'domain': 'global', 'reason': 'badRequest'}],
+        'status': 'INVALID_ARGUMENT',
+        'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'API_KEY_INVALID', 'domain': 'googleapis.com', 'metadata': {'service': 'youtube.googleapis.com'}}]
+    }
+}
+    """
+    channel_id = response['items'][0]['snippet']['channelId']
     return channel_id
 
 def get_new_comments(video_id,api_key):
