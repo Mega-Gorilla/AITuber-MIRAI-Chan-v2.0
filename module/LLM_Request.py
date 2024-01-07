@@ -24,7 +24,7 @@ async def request_talk_logTosummary():
     for d in talk_log:
         key, value = list(d.items())[0]
         str_talk_log += f"{key} -> {value}\n"
-    await asyncio.sleep(0)
+        await asyncio.sleep(0.2)
     return {"talk_log":str_talk_log,"old_talk_log":summary}
 
 async def request_game_logTosummary():
@@ -38,7 +38,7 @@ async def request_game_logTosummary():
         key = d["name"]
         value = d["text"]
         game_log_str += f"{key} -> {value}\n"
-    await asyncio.sleep(0)
+        await asyncio.sleep(0.2)
     return {"game_log":game_log_str,"old_game_log":game_summary,"game_info":game_info}
 
 async def get_mic_recorded_str():
@@ -58,7 +58,7 @@ async def get_game_log():
         key = d["name"]
         value = d["text"]
         if key == "ハカセ":
-            key = "主人公"
+            key = "主人公(ハカセ)"
         if key != "":
             game_log_str += f"{key} -> {value}\n"
         else:
@@ -99,7 +99,7 @@ async def request_airi_v17():
     #Speech to Text文章を取得
     mic_recorded_str = await get_mic_recorded_str()
     if mic_recorded_str != "":
-        requests.post(f"{config.AI_Tuber_URL}/talk_log/post",json={"博士":mic_recorded_str})
+        requests.post(f"{config.AI_Tuber_URL}/talk_log/post",json=[{"博士":mic_recorded_str}])
 
     if mic_recorded_str != "":
     #類似会話例を取得
@@ -180,7 +180,7 @@ async def request_airi_v18():
     #Speech to Text文章を取得
     mic_recorded_str = await get_mic_recorded_str()
     if mic_recorded_str != "":
-        requests.post(f"{config.AI_Tuber_URL}/talk_log/post",json={"博士":mic_recorded_str})
+        requests.post(f"{config.AI_Tuber_URL}/talk_log/post",json=[{"博士":mic_recorded_str}])
 
     #会話ログを作成
     talk_log = ""
@@ -246,7 +246,7 @@ async def request_airi_v17_gemini():
     #Speech to Text文章を取得
     mic_recorded_str = await get_mic_recorded_str()
     if mic_recorded_str != "":
-        requests.post(f"{config.AI_Tuber_URL}/talk_log/post",json={"博士":mic_recorded_str})
+        requests.post(f"{config.AI_Tuber_URL}/talk_log/post",json=[{"博士":mic_recorded_str}])
 
     #会話ログを作成
     talk_log = ""
