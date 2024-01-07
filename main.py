@@ -22,11 +22,11 @@ class config:
     AI_Tuber_URL = "http://127.0.0.1:8001"
 
     #みらい1.5 プロンプト
-    mirai_prompt_name = 'airi_v18'
+    mirai_prompt_name = 'airi_v18_onlyAI'
     viewer_count = 0
     subscriber_count = 0
 
-    #監督　プロンプト
+    #監督　プロンプト 
     charactor_list = """未来 アイリ
 猩々 博士"""
     facial_expressions_list = """NEUTRAL (This is the default expression)
@@ -57,12 +57,14 @@ class LLM_config:
         "game_logTosummary":request_game_logTosummary,
         "airi_v17":request_airi_v17,
         "airi_v18":request_airi_v18,
-        "airi_v17_gemini":request_airi_v17_gemini
+        "airi_v17_gemini":request_airi_v17_gemini,
+        "airi_v18_onlyAI":request_airi_v18_onlyAI
         }
     process_function_map = {
         "airi_v17": process_airi_v17,
         "airi_v18": process_airi_v17,
         "airi_v17_gemini":process_airi_v17,
+        "airi_v18_onlyAI":process_airi_v17,
         "talk_logTosummary":process_talk_logTosummary,
         "game_logTosummary":process_game_logTosummary,
         "Statement_to_animMotion_2":Statement_to_animMotion,
@@ -106,7 +108,7 @@ async def request_llm(prompt_name,variables,stream=False):
     for key,value in variables.items():
         console.print(f"{key}: {value}",style='green')
     console.print("------------------END------------------\n",style='blue')
-
+    await asyncio.sleep(0)
     return request_id
 
 async def reset_similarity_search():
@@ -181,6 +183,7 @@ async def Mirai_15_model():
                 result = requests.get(url=f"{config.AI_Tuber_URL}/StoT_process/get/").json()
                 if result == False:
                     break
+                print("V to T weit")
                 await asyncio.sleep(0.2)
             #LLM問合せリクエスト
             requests.post(f"{config.AI_Tuber_URL}/LLM/request/post/?prompt_name={config.mirai_prompt_name}&stream=true")
@@ -216,6 +219,7 @@ async def Mirai_15_model():
 
             #Streamタスクについては即時タスク化
             for request in stream_true:
+                console.print(f"Process: {request['prompt_name']}",style='yellow')
                 asyncio.create_task(LLM_config.process_function_map[request["prompt_name"]](request["request_id"]))
                 requests.get(f"{config.AI_Tuber_URL}/LLM/process/get/?del_request_id={request['request_id']}")
                 await asyncio.sleep(0)
@@ -232,6 +236,7 @@ async def Mirai_15_model():
                 error("Process タスク作成エラー",e,{"stream":False,"LLM_results_list":LLM_results_list,"LLM_results_request_id_list":LLM_results_request_id_list,"stream_false":stream_false})
             #LLMからレスポンスが返ってきているものについてはProcessタスクを実行する。
             for request in  stream_false:
+                console.print(f"Process: {request['prompt_name']}",style='yellow')
                 asyncio.create_task(LLM_config.process_function_map[request["prompt_name"]](request["request_id"]))
                 requests.get(f"{config.AI_Tuber_URL}/LLM/process/get/?del_request_id={request['request_id']}")
                 await asyncio.sleep(0)
