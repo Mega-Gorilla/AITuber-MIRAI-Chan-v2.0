@@ -37,6 +37,13 @@ def get_channel_id(URL,API_key):
 
     # チャンネルIDを取得
     print(response)
+    if 'error' in response:
+        print(f"YouTube Data API Error\n{response['error']['message']}")
+        return False
+    else:
+        channel_id = response['items'][0]['snippet']['channelId']
+        return channel_id
+    
     """
     {
     'error': {
@@ -48,8 +55,6 @@ def get_channel_id(URL,API_key):
     }
 }
     """
-    channel_id = response['items'][0]['snippet']['channelId']
-    return channel_id
 
 def get_new_comments(video_id,api_key):
     """
