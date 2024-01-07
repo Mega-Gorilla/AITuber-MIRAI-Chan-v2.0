@@ -11,10 +11,14 @@ class airi_v17_config:
     subscriber_count = 0
     tone_example_top_n = 3
 
+class summary_data:
+    chara_talk_log = []
+    game_talk_log = []
 
 async def request_talk_logTosummary():
     #要約向けデータを取得
     talk_log = requests.get(f"{config.AI_Tuber_URL}/talk_log/get?reset=false").json()
+    summary_data.chara_talk_log = talk_log
     summary = requests.get(f"{config.AI_Tuber_URL}/summary/get").json()
     str_talk_log = ""
     for d in talk_log:
@@ -26,6 +30,7 @@ async def request_talk_logTosummary():
 async def request_game_logTosummary():
     #ゲーム要約用データを取得
     game_log = requests.get(f"{config.AI_Tuber_URL}/GameData/talk_log/get?reset=false").json()
+    summary_data.game_talk_log = game_log
     game_summary = requests.get(f"{config.AI_Tuber_URL}/GameData/summary/get").json()
     game_info = requests.get(f"{config.AI_Tuber_URL}/GameData/GameInfo/get").json()
     game_log_str = ""
@@ -112,7 +117,7 @@ async def request_airi_v17():
     other_streaming_info = ""
     game_title = requests.get(f"{config.AI_Tuber_URL}/GameName/get").json()
     if game_title != "":
-        game_log = await get_data_from_server(URL=f"{config.AI_Tuber_URL}/GameData/talk_log/get?reset=false")
+        game_log = requests.get(f"{config.AI_Tuber_URL}/GameData/talk_log/get?reset=false").json()
         game_log_str = ""
         for d in game_log:
             key = d["name"]
@@ -121,7 +126,7 @@ async def request_airi_v17():
         game_log_str = game_log_str.rstrip('\n')
         game_summary = requests.get(f"{config.AI_Tuber_URL}/GameData/summary/get").json()
         game_info = requests.get(f"{config.AI_Tuber_URL}/GameData/GameInfo/get").json()
-        other_streaming_info = "\n"+game_info + "\n\nSummary content of the game information being played:\n" + game_summary + "\n\nGame Logs:\n" + game_log_str
+        other_streaming_info = "\n"+game_info + "\n\nSummary content of the game information being played:\n" + game_summary + "\n\nGame Logs(Top - Old, Bottom - New):\n" + game_log_str
 
 
     mirai_prompt_variables = {
@@ -136,7 +141,6 @@ async def request_airi_v17():
     }
     await asyncio.sleep(0)
     return mirai_prompt_variables
-
 
 async def request_airi_v18():
     
@@ -190,7 +194,7 @@ async def request_airi_v18():
     other_streaming_info = ""
     game_title = requests.get(f"{config.AI_Tuber_URL}/GameName/get").json()
     if game_title != "":
-        game_log = await get_data_from_server(URL=f"{config.AI_Tuber_URL}/GameData/talk_log/get?reset=false")
+        game_log = requests.get(f"{config.AI_Tuber_URL}/GameData/talk_log/get?reset=false").json()
         game_log_str = ""
         for d in game_log:
             key = d["name"]
@@ -265,8 +269,79 @@ async def request_airi_v17_gemini():
     #game_infoを取得
     other_streaming_info = ""
     game_title = requests.get(f"{config.AI_Tuber_URL}/GameName/get").json()
+    if game_title != "": 
+        game_log = requests.get(f"{config.AI_Tuber_URL}/GameData/talk_log/get?reset=false").json()
+        game_log_str = ""
+        for d in game_log:
+            key = d["name"]
+            value = d["text"]
+            game_log_str += f"{key} -> {value}\n"
+        game_log_str = game_log_str.rstrip('\n')
+        game_summary = requests.get(f"{config.AI_Tuber_URL}/GameData/summary/get").json()
+        game_info = requests.get(f"{config.AI_Tuber_URL}/GameData/GameInfo/get").json()
+        other_streaming_info = "\n"+game_info + "\n\nSummary content of the game information being played:\n" + game_summary + "\n\nGame Logs:\n" + game_log_str
+
+
+    mirai_prompt_variables = {
+        "stream_summary": stream_summary,
+        "talk_logs": talk_log,
+        "subscribers_num": subscriber_count,
+        "viewers_num": viewer_count,
+        "viewer_comments": new_comment_str,
+        "Showrunner_advice": showrunner_advice,
+        "other_streaming_info": other_streaming_info
+    }
+    await asyncio.sleep(0)
+    return mirai_prompt_variables
+
+async def request_airi_v18_onlyAI():
+    
+    mirai_prompt_name = 'airi_v18_onlyAI'
+    #みらいプロンプトに必要な関数情報を取得
+    mirai_prompt_data = requests.get(f"{config.GPT_Mangaer_URL}/prompts-get/lookup_prompt_by_name?prompt_name={mirai_prompt_name}").json()
+    mirai_prompt_variables = mirai_prompt_data['variables']
+    
+    #Youtubeデータ取得
+    new_comment_str = await get_youtube_comments_str()
+    new_viewer_count = await get_youtube_viewer_counts()
+    new_subscriber_count = await get_youtube_subscriber_counts()
+
+    viewer_count = "No Data."
+    if new_viewer_count['ok']==True:
+        if airi_v17_config.viewer_count == new_viewer_count['viewer_count']:
+            viewer_count = f"{new_viewer_count['viewer_count']} (Viewership Change: 0)"
+        else:
+            viewer_count = f"{new_viewer_count['viewer_count']} (Viewership Change: {new_viewer_count['viewer_count']-airi_v17_config.viewer_count})"
+        airi_v17_config.viewer_count = new_viewer_count['viewer_count']
+
+    subscriber_count = "No Data."
+    if new_subscriber_count['ok']==True:
+        if airi_v17_config.subscriber_count == new_subscriber_count['subscriber_count']:
+            subscriber_count = f"{new_subscriber_count['subscriber_count']} (Subscriber Change: 0)"
+        else:
+            subscriber_count = f"{new_subscriber_count['subscriber_count']} (Subscriber Change: {new_subscriber_count['subscriber_count']-airi_v17_config.subscriber_count})"
+        airi_v17_config.subscriber_count = new_subscriber_count['subscriber_count']
+
+    #会話ログを作成
+    talk_log = ""
+    talk_log_list = requests.get(f"{config.AI_Tuber_URL}/talk_log/get?reset=false").json()
+    if talk_log_list != []:
+        for d in talk_log_list:
+            key, value = list(d.items())[0]
+            talk_log += f"{key} -> {value}\n"
+        talk_log = talk_log.rstrip('\n')
+    
+    #Summaryの取得
+    stream_summary = requests.get(f"{config.AI_Tuber_URL}/summary/get").json()
+    
+    #Showrunner_adviceの取得
+    showrunner_advice = requests.post(f"{config.AI_Tuber_URL}/Showrunner_Advice/post/?mic_end=false").json()
+
+    #game_infoを取得
+    other_streaming_info = ""
+    game_title = requests.get(f"{config.AI_Tuber_URL}/GameName/get").json()
     if game_title != "":
-        game_log = await get_data_from_server(URL=f"{config.AI_Tuber_URL}/GameData/talk_log/get?reset=false")
+        game_log = requests.get(f"{config.AI_Tuber_URL}/GameData/talk_log/get?reset=false").json()
         game_log_str = ""
         for d in game_log:
             key = d["name"]
