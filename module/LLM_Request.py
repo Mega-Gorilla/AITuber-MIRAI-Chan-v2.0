@@ -51,6 +51,23 @@ async def get_mic_recorded_str():
     await asyncio.sleep(0)
     return result
 
+async def get_game_log():
+    game_log = requests.get(f"{config.AI_Tuber_URL}/GameData/talk_log/get?reset=false").json()
+    game_log_str = ""
+    for d in game_log:
+        key = d["name"]
+        value = d["text"]
+        if key == "ハカセ":
+            key = "主人公"
+        if key != "":
+            game_log_str += f"{key} -> {value}\n"
+        else:
+            game_log_str += f"{value}"
+    game_log_str = game_log_str.rstrip('\n')
+    game_summary = requests.get(f"{config.AI_Tuber_URL}/GameData/summary/get").json()
+    game_info = requests.get(f"{config.AI_Tuber_URL}/GameData/GameInfo/get").json()
+    return "\n"+game_info + "\n\nSummary content of the game information being played:\n" + game_summary + "\n\nGame Logs(Top - Old, Bottom - New):\n" + game_log_str
+
 async def request_airi_v17():
 
     mirai_prompt_name = 'airi_v17'
@@ -117,17 +134,7 @@ async def request_airi_v17():
     other_streaming_info = ""
     game_title = requests.get(f"{config.AI_Tuber_URL}/GameName/get").json()
     if game_title != "":
-        game_log = requests.get(f"{config.AI_Tuber_URL}/GameData/talk_log/get?reset=false").json()
-        game_log_str = ""
-        for d in game_log:
-            key = d["name"]
-            value = d["text"]
-            game_log_str += f"{key} -> {value}\n"
-        game_log_str = game_log_str.rstrip('\n')
-        game_summary = requests.get(f"{config.AI_Tuber_URL}/GameData/summary/get").json()
-        game_info = requests.get(f"{config.AI_Tuber_URL}/GameData/GameInfo/get").json()
-        other_streaming_info = "\n"+game_info + "\n\nSummary content of the game information being played:\n" + game_summary + "\n\nGame Logs(Top - Old, Bottom - New):\n" + game_log_str
-
+        other_streaming_info = await get_game_log()
 
     mirai_prompt_variables = {
         "example_tone": streamer_tone,
@@ -194,17 +201,7 @@ async def request_airi_v18():
     other_streaming_info = ""
     game_title = requests.get(f"{config.AI_Tuber_URL}/GameName/get").json()
     if game_title != "":
-        game_log = requests.get(f"{config.AI_Tuber_URL}/GameData/talk_log/get?reset=false").json()
-        game_log_str = ""
-        for d in game_log:
-            key = d["name"]
-            value = d["text"]
-            game_log_str += f"{key} -> {value}\n"
-        game_log_str = game_log_str.rstrip('\n')
-        game_summary = requests.get(f"{config.AI_Tuber_URL}/GameData/summary/get").json()
-        game_info = requests.get(f"{config.AI_Tuber_URL}/GameData/GameInfo/get").json()
-        other_streaming_info = "\n"+game_info + "\n\nSummary content of the game information being played:\n" + game_summary + "\n\nGame Logs:\n" + game_log_str
-
+        other_streaming_info = await get_game_log()
 
     mirai_prompt_variables = {
         "stream_summary": stream_summary,
@@ -269,18 +266,8 @@ async def request_airi_v17_gemini():
     #game_infoを取得
     other_streaming_info = ""
     game_title = requests.get(f"{config.AI_Tuber_URL}/GameName/get").json()
-    if game_title != "": 
-        game_log = requests.get(f"{config.AI_Tuber_URL}/GameData/talk_log/get?reset=false").json()
-        game_log_str = ""
-        for d in game_log:
-            key = d["name"]
-            value = d["text"]
-            game_log_str += f"{key} -> {value}\n"
-        game_log_str = game_log_str.rstrip('\n')
-        game_summary = requests.get(f"{config.AI_Tuber_URL}/GameData/summary/get").json()
-        game_info = requests.get(f"{config.AI_Tuber_URL}/GameData/GameInfo/get").json()
-        other_streaming_info = "\n"+game_info + "\n\nSummary content of the game information being played:\n" + game_summary + "\n\nGame Logs:\n" + game_log_str
-
+    if game_title != "":
+        other_streaming_info = await get_game_log()
 
     mirai_prompt_variables = {
         "stream_summary": stream_summary,
@@ -341,17 +328,7 @@ async def request_airi_v18_onlyAI():
     other_streaming_info = ""
     game_title = requests.get(f"{config.AI_Tuber_URL}/GameName/get").json()
     if game_title != "":
-        game_log = requests.get(f"{config.AI_Tuber_URL}/GameData/talk_log/get?reset=false").json()
-        game_log_str = ""
-        for d in game_log:
-            key = d["name"]
-            value = d["text"]
-            game_log_str += f"{key} -> {value}\n"
-        game_log_str = game_log_str.rstrip('\n')
-        game_summary = requests.get(f"{config.AI_Tuber_URL}/GameData/summary/get").json()
-        game_info = requests.get(f"{config.AI_Tuber_URL}/GameData/GameInfo/get").json()
-        other_streaming_info = "\n"+game_info + "\n\nSummary content of the game information being played:\n" + game_summary + "\n\nGame Logs:\n" + game_log_str
-
+        other_streaming_info = await get_game_log()
 
     mirai_prompt_variables = {
         "stream_summary": stream_summary,
