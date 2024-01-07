@@ -176,8 +176,9 @@ def Showrunner_advice_post(prompt_name:str="",mic_end: bool =False,AI_talk:bool 
         AI_Tuber_setting.Showrunner_advice_prompt_name = prompt_name
     
     if mic_end:
-        mic_setting.mic_recording_bool = True
-        mic_setting.processing = True
+        if mic_setting.mic_recording_bool == False:
+            mic_setting.mic_recording_bool = True
+            mic_setting.processing = True
     
     try:
         with open('data/showrunner_advice_list.json', 'r', encoding='utf-8') as file:
@@ -404,8 +405,12 @@ def set_stream_url(url:str):
     """
     Youtube_API_settings.youtube_URL = url
     Youtube_API_settings.youtube_VideoID = extract_video_id(url)
-    Youtube_API_settings.youtube_channel_id = get_channel_id(url,Youtube_API_settings.youtube_api_key)
-    return {'ok':True,"message": f"URL:{url} / Channel_ID:{Youtube_API_settings.youtube_channel_id}"}
+    channel_id = get_channel_id(url,Youtube_API_settings.youtube_api_key)
+    if channel_id != False:
+        Youtube_API_settings.youtube_channel_id = get_channel_id(url,Youtube_API_settings.youtube_api_key)
+        return {'ok':True,"message": f"URL:{url} / Channel_ID:{Youtube_API_settings.youtube_channel_id}"}
+    else:
+        return {'ok':False}
 
 @app.get("/youtube_api/get_stream_url/", tags=["Youtube API"])
 def get_stream_url():
