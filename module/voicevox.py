@@ -6,7 +6,7 @@ import pyaudio
 import platform
 from pprint import pprint
 
-def audio_query(text, speaker, max_retry=3):
+def voicevox_audio_query(text, speaker, max_retry=3):
     """
     音声合成のための問い合わせを作成する関数。
 
@@ -33,7 +33,7 @@ def audio_query(text, speaker, max_retry=3):
         raise ConnectionError("リトライ回数が上限に到達しました。 audio_query : ", "/", text[:30], r.text)
     return query_data
 
-def audio_query_from_preset(text, preset_id, max_retry=3):
+def voicevox_audio_query_from_preset(text, preset_id, max_retry=3):
     """
     プリセットを使用して音声合成のための問い合わせを作成する関数。
 
@@ -61,7 +61,7 @@ def audio_query_from_preset(text, preset_id, max_retry=3):
         raise ConnectionError("リトライ回数が上限に到達しました。 audio_query : ", "/", text[:30], r.text)
     return query_data
 
-def synthesis(speaker, query_data,max_retry):
+def voicevox_synthesis(speaker, query_data,max_retry):
     """
     与えられた問い合わせデータを使用して音声合成を行う関数。
 
@@ -88,7 +88,7 @@ def synthesis(speaker, query_data,max_retry):
     else:
         raise ConnectionError("synthesis エラー：リトライ回数が上限に到達しました。 synthesis : ", r)
 
-def Get_presets():
+def voicevox_Get_presets():
     """
     すべての作成されたプリセットを取得する関数。
 
@@ -115,7 +115,7 @@ def Get_presets():
         print(f"Error: Received status code {r.status_code}")
         return None
 
-def Add_preset(id: int,name: str,speaker_uuid: str,style_id=0,speedScale=1.0,pitchScale=0,intonationScale=1.0,volumeScale=1.00,prePhonemeLength=0,postPhonemeLength=0,max_retry=3):
+def voicevox_Add_preset(id: int,name: str,speaker_uuid: str,style_id=0,speedScale=1.0,pitchScale=0,intonationScale=1.0,volumeScale=1.00,prePhonemeLength=0,postPhonemeLength=0,max_retry=3):
     """
     新しいプリセットを追加する関数。
     Args:
@@ -167,7 +167,7 @@ def Add_preset(id: int,name: str,speaker_uuid: str,style_id=0,speedScale=1.0,pit
 
     return query_data
 
-def update_preset(id: int,name: str,speaker_uuid: str,style_id=0,speedScale=1.0,pitchScale=0,intonationScale=1.0,volumeScale=1.00,prePhonemeLength=0,postPhonemeLength=0,max_retry=3):
+def voicevox_update_preset(id: int,name: str,speaker_uuid: str,style_id=0,speedScale=1.0,pitchScale=0,intonationScale=1.0,volumeScale=1.00,prePhonemeLength=0,postPhonemeLength=0,max_retry=3):
     """
     既存のプリセットを更新する関数。
 
@@ -203,7 +203,7 @@ def update_preset(id: int,name: str,speaker_uuid: str,style_id=0,speedScale=1.0,
     else:
         raise ConnectionError("音声エラー：リトライ回数が上限に到達しました。 synthesis : ", r.json())
 
-def delete_preset(id:int):
+def voicevox_delete_preset(id:int):
     """
     プリセットを削除する関数。
 
@@ -222,14 +222,14 @@ def delete_preset(id:int):
         print(f"delete_preset Error: Received status code {r.status_code} at delete id {id}")
         return False
 
-def remove_all_presets():
-    presetlist=Get_presets()
+def voicevox_remove_all_presets():
+    presetlist=voicevox_Get_presets()
     #delete all preset
     if presetlist != []:
         for item in presetlist:
-            delete_preset(id=item['id'])
+            voicevox_delete_preset(id=item['id'])
 
-def speakers():
+def voicevox_speakers():
     """
     利用可能なすべてのspeakerを取得する関数。stylesやspeaker_uuidを取得する関数。
 
@@ -268,7 +268,7 @@ def speakers():
         return None
     
 #Process4
-def audio_stream_start():
+def voicevox_audio_stream_start(lipsync = True):
     """
     オーディオストリームを開始する関数。
 
@@ -281,21 +281,24 @@ def audio_stream_start():
     # VB-CABLEのインデックスを見つける
     current_os = platform.system()
     mic_name =""
-    vb_cable_index = -1
+    output_device_index = -1
     if current_os == "Windows":
         mic_name = "CABLE Input"
     else:
         mic_name = "VB"
 
-    for i in range(p.get_device_count()):
-        dev_info = p.get_device_info_by_index(i)
-        #print(dev_info['name'])
-        if mic_name in dev_info["name"]:
-            vb_cable_index = dev_info["index"]
-            #print(f'再生デバイス名: {dev_info["name"]}')
-            break
+    if lipsync:
+        for i in range(p.get_device_count()):
+            dev_info = p.get_device_info_by_index(i)
+            #print(dev_info['name'])
+            if mic_name in dev_info["name"]:
+                output_device_index = dev_info["index"]
+                #print(f'再生デバイス名: {dev_info["name"]}')
+                break
+    else:
+        output_device_index = p.get_default_output_device_info()["index"]
 
-    if vb_cable_index == -1:
+    if output_device_index == -1:
         print("VB-Audio Virtualが見つかりませんでした。インストール済みかどうか確認してください。")
         return
     
@@ -304,12 +307,12 @@ def audio_stream_start():
                     channels=1,
                     rate=24000,
                     output=True,
-                    output_device_index=vb_cable_index)
+                    output_device_index=output_device_index)
     #プツ音防止の為、待機
     time.sleep(0.4)
     return stream
 #Process4
-def audio_stream_stop(stream):
+def voicevox_audio_stream_stop(stream):
     """
     オーディオストリームを停止する関数。
 
@@ -322,7 +325,7 @@ def audio_stream_stop(stream):
 
     p.terminate()
 
-def text_to_wave(texts, preset_id=None, speaker=8, max_retry=20):
+def voicevox_text_to_wave(texts, preset_id=None, speaker=8, max_retry=20):
     """
     テキストを音声に変換する関数。
 
@@ -341,14 +344,14 @@ def text_to_wave(texts, preset_id=None, speaker=8, max_retry=20):
     
     # audio_query
     if preset_id is not None:
-        query_data = audio_query_from_preset(text=texts,preset_id=preset_id)
+        query_data = voicevox_audio_query_from_preset(text=texts,preset_id=preset_id)
     else:
-        query_data = audio_query(texts,speaker,max_retry)
+        query_data = voicevox_audio_query(texts,speaker,max_retry)
     # synthesis
-    voice_data=synthesis(speaker,query_data,max_retry)
+    voice_data=voicevox_synthesis(speaker,query_data,max_retry)
     return voice_data
 
-def text_to_wavefile(texts, file_path, preset_id=None, speaker=8, max_retry=20):
+def voicevox_text_to_wavefile(texts, file_path, preset_id=None, speaker=8, max_retry=20):
     """
     テキストを音声に変換し、指定されたパスにWAVファイルとして保存する関数。
 
@@ -367,12 +370,12 @@ def text_to_wavefile(texts, file_path, preset_id=None, speaker=8, max_retry=20):
     
     # audio_query
     if preset_id is not None:
-        query_data = audio_query_from_preset(text=texts, preset_id=preset_id)
+        query_data = voicevox_audio_query_from_preset(text=texts, preset_id=preset_id)
     else:
-        query_data = audio_query(texts, speaker, max_retry)
+        query_data = voicevox_audio_query(texts, speaker, max_retry)
     
     # synthesis
-    voice_data = synthesis(speaker, query_data, max_retry)
+    voice_data = voicevox_synthesis(speaker, query_data, max_retry)
 
     # WAVファイルとして保存
     with open(file_path, 'wb') as file:
@@ -382,27 +385,27 @@ def text_to_wavefile(texts, file_path, preset_id=None, speaker=8, max_retry=20):
 
 if __name__ == "__main__":
     #Add_preset(id=0,name="ナースロボ-ノーマル",speaker_uuid="882a636f-3bac-431a-966d-c5e6bba9f949",style_id=47,speedScale=1.37,pitchScale=0,intonationScale=1,volumeScale=1,prePhonemeLength=0,postPhonemeLength=0)
-    presetlist=Get_presets()
+    presetlist=voicevox_Get_presets()
     pprint(presetlist)
     #delete all preset
-    '''
+    
     if presetlist != []:
         for item in presetlist:
-            delete_preset(id=item['id'])
-            '''
+            voicevox_delete_preset(id=item['id'])
+            
 
     #プリセット追加
-    Add_preset(id=1,name="ナースロボ-ノーマル",speaker_uuid="882a636f-3bac-431a-966d-c5e6bba9f949",style_id=47,speedScale=1.15,pitchScale=0.0,intonationScale=1.3,volumeScale=1.0,prePhonemeLength=0.0,postPhonemeLength=0.0)
+    voicevox_Add_preset(id=1,name="ナースロボ-ノーマル",speaker_uuid="882a636f-3bac-431a-966d-c5e6bba9f949",style_id=47,speedScale=1.15,pitchScale=0.0,intonationScale=1.3,volumeScale=1.0,prePhonemeLength=0.0,postPhonemeLength=0.0)
     #Add_preset(id=1,name="ナースロボ-恐怖",speaker_uuid="882a636f-3bac-431a-966d-c5e6bba9f949",style_id=49,speedScale=1,pitchScale=0,intonationScale=1,volumeScale=1,prePhonemeLength=0,postPhonemeLength=0)
 
     processtime=time.time()
-    stream = audio_stream_start()
-    data=text_to_wave("""みなさん、こんにちは！ みらいちゃんことみらいです！""",preset_id=1,speaker=8)
+    stream = voicevox_audio_stream_start()
+    data=voicevox_text_to_wave("""みなさん、こんにちは！ みらいちゃんことみらいです！""",preset_id=1,speaker=8)
     stream.write(data)
     stream.write(data)
     print(f"処理時間:{time.time()-processtime}")
-    audio_stream_stop(stream)
+    voicevox_audio_stream_stop(stream)
 
-    stream = audio_stream_start()
+    stream = voicevox_audio_stream_start()
     stream.write(data)
-    audio_stream_stop(stream)
+    voicevox_audio_stream_stop(stream)
