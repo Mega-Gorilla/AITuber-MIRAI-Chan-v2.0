@@ -3,13 +3,17 @@ from module.live_chat_fetcher import *
 from module.find_similar import AnswerFinder
 from module.CSV_toolkit import csv_to_dict_array
 from module.EasyOCR import *
-from fastapi import FastAPI,BackgroundTasks,HTTPException
-from typing import List, Any
+from module.voicevox import *
+from rich.console import Console
+from fastapi import FastAPI,BackgroundTasks,HTTPException,Request
+from fastapi.responses import JSONResponse
+from typing import List, Any, Dict
 from pydantic import BaseModel
 import asyncio
 import os
 import json
 
+console = Console()
 app = FastAPI(title='AI Tuber API',version='β1.5')
 
 #将来的にDBに移行
@@ -74,6 +78,15 @@ class game_data:
 class LLM_config:
     request_list = []
     process_list = []
+
+class text_to_vice_data:
+    voice_requests = []
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    # ここでエラーの詳細をprint
+    print(f"エラー詳細: {exc.detail}")
+    return {"ok":False,'message':JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})}
 
 @app.post("/mic_mute/post/", tags=["Mic Settings"])
 def mic_post_item(mic_mute: bool = False):
@@ -283,7 +296,6 @@ def motion_similar_get(str_dialogue:str,top_n:int = 3):
         result = []
         for item1 in responce:
             if 'text' in item1:
-                print(item1)
                 for item2 in motion_dict:
                     print(f"item2: {item2}")
                     if item1['text'] in item2.values():
@@ -333,12 +345,12 @@ def Program_Fin_get_item():
 
 
 @app.post("/talk_log/post",tags=["AI Tuber"])
-def post_talk_log(talklog_list: dict):
+def post_talk_log(talklog_list: List[Dict[str, str]]):
     """
     トークログを投稿します
     """
     print(f"Talk_log: {talklog_list}")
-    AI_Tuber_setting.talk_log.append(talklog_list)
+    AI_Tuber_setting.talk_log+=talklog_list
     return AI_Tuber_setting.talk_log
 
 @app.get("/talk_log/get",tags=["AI Tuber"])
@@ -617,8 +629,77 @@ def ocr_scan(app_name: str,capture_size: List[int],save_image: bool = False,whit
     results = [OCRResult(coordinates=coords, text=text, confidence=conf) for coords, text, conf in raw_data]
     return results
 
+class dokidoki_voice_config:
+    # No.7,九州そら,猫使ビィ,四国めたん,青山龍星,ずんだもん
+    chara_list = [{
+        "chara_name": "ユリ",
+        "speaker_uuid": "044830d2-f23b-44d6-ac0d-b5d733caa900",
+        "style_id": 29,
+        "speedScale": 1.1,
+        "pitchScale": 0,
+        "intonationScale": 1.2,
+        "volumeScale": 1.2,
+        "prePhonemeLength": 0.1,
+        "postPhonemeLength": 0.1
+        },
+        {
+        "chara_name": "モニカ",
+        "speaker_uuid": "481fb609-6446-4870-9f46-90c4dd623403",
+        "style_id": 17,
+        "speedScale": 1.3,
+        "pitchScale": 0.05,
+        "intonationScale": 1.2,
+        "volumeScale": 1.0,
+        "prePhonemeLength": 0.1,
+        "postPhonemeLength": 0.1
+        },
+        {
+        "chara_name": "サヨリ",
+        "speaker_uuid": "c20a2254-0349-4470-9fc8-e5c0f8cf3404",
+        "style_id": 58,
+        "speedScale": 1.2,
+        "pitchScale": -0.03,
+        "intonationScale": 1.2,
+        "volumeScale": 1.0,
+        "prePhonemeLength": 0.1,
+        "postPhonemeLength": 0.1
+        },
+        {
+        "chara_name": "ナツキ",
+        "speaker_uuid": "7ffcb7ce-00ec-4bdc-82cd-45a8889e43ff",
+        "style_id": 2,
+        "speedScale": 1.2,
+        "pitchScale": 0.03,
+        "intonationScale": 1.31,
+        "volumeScale": 1.0,
+        "prePhonemeLength": 0.1,
+        "postPhonemeLength": 0.1
+        },
+        {
+        "chara_name": "ハカセ",
+        "speaker_uuid": "4f51116a-d9ee-4516-925d-21f183e2afad",
+        "style_id": 13,
+        "speedScale": 1.2,
+        "pitchScale": 0.0,
+        "intonationScale": 1.0,
+        "volumeScale": 1.0,
+        "prePhonemeLength": 0.1,
+        "postPhonemeLength": 0.1
+        },
+        {
+        "chara_name": "読み上げ",
+        "speaker_uuid": "388f246b-8c41-4ac1-8e2d-5d79f3ff56d9",
+        "style_id": 3,
+        "speedScale": 1.2,
+        "pitchScale": 0.0,
+        "intonationScale": 1.0,
+        "volumeScale": 1.0,
+        "prePhonemeLength": 0.1,
+        "postPhonemeLength": 0.1
+        }]
+
 @app.post("/EasyOCR/scan/Doki_Doki_Literature_Club/",tags=["OCR"])
-def Doki_Doki_Literature_Club_ocr(debug: bool = False):
+def Doki_Doki_Literature_Club_ocr(Auto_Talk:bool = False,debug: bool = False):
     """
     OCR スキャンを行います。このスキャンは、Doki Doki Literature Clubに対応しています。
     OCR結果を返します。スキャンしたOCR結果は、game_data.Game_talkLogに記録されます。
@@ -634,6 +715,11 @@ def Doki_Doki_Literature_Club_ocr(debug: bool = False):
         raise HTTPException(status_code=400, detail="Could not obtain the specified application name.")
     if text_data["text"] != "":
         game_data.Game_talkLog.append(text_data)
+        if Auto_Talk:
+            matching_chara_dict = next((item for item in dokidoki_voice_config.chara_list if item["chara_name"] == text_data['name']), dokidoki_voice_config.chara_list[-1])
+            matching_chara_dict.update({"text": text_data["text"],"subs": False,"service":'voicevox','lipsync':False})
+            text_to_vice_data.voice_requests.append(matching_chara_dict)
+
         return text_data
     else:
         return None
@@ -648,13 +734,17 @@ def get_game_talk_log(reset:bool = False):
         game_data.Game_talkLog = []
     return return_data
 
+class GameTalkLog(BaseModel):
+    name: str
+    text: str
+
 @app.post("/GameData/talk_log/post",tags=["Games"])
-def post_game_talk_log(gamelog: dict):
+def post_game_talk_log(gamelog: List[GameTalkLog]):
     """
     ゲームトークログを投稿します
     """
     print(f"GameLog: {gamelog}")
-    game_data.Game_talkLog.append(gamelog)
+    game_data.Game_talkLog+=gamelog
     return game_data.Game_talkLog
 
 @app.post("/GameData/summary/post",tags=["Games"])
@@ -756,6 +846,33 @@ def set_game_name(game_name:str = ""):
 @app.get("/GameName/get", tags=["Games"])
 def get_game_name():
     return game_data.Game_name
+
+class voicevox_request(BaseModel):
+    chara_name: str
+    text: str
+    subs: bool = True
+    lipsync: bool = True
+    speaker_uuid: str = ""
+    style_id: int = 0
+    speedScale : float = 1.0
+    pitchScale : float = 0.0
+    intonationScale : float = 1.0
+    volumeScale : float = 1.0
+    prePhonemeLength : float = 0.1
+    postPhonemeLength : float = 0.1
+    
+@app.post("/text_to_vice/voicevox/post",tags=['Text to Voice'])
+def text_to_voice_post(post_data:voicevox_request):
+    data = post_data.dict()
+    data.update({'service':'voicevox'})
+    text_to_vice_data.voice_requests.append(data)
+
+@app.get("/text_to_vice/get",tags=['Text to Voice'])
+def text_to_voice_get(reset:bool = False):
+    data = text_to_vice_data.voice_requests
+    if reset:
+        text_to_vice_data.voice_requests = []
+    return data
 
 def create_or_load_chroma_db_background(csv_directory,persist_directory):
     AnswerFinder_settings.start = False
