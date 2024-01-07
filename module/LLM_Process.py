@@ -1,6 +1,8 @@
 import requests,asyncio
 from module.voicevox import *
+from module.LLM_Request import summary_data
 from rich.console import Console
+import time
 
 """
 本スクリプトは、LLM問合せ後の処理がプロンプトごとに記載されています。
@@ -20,6 +22,8 @@ class LLM:
     total_token_summary_trigger = {"gpt-4-1106-preview":3171,"gpt-4":6143} #"gpt-4-1106-preview":3171,"gpt-4":6143
     completion_token_summary_trigger = {"gemini-pro":6144}
 
+    loop_break_time = 180 #s
+
 class voicevox:
     # 一時的、VoiceVox移行後消去
     voicevox_name = 'AIRI'
@@ -38,6 +42,7 @@ async def process_airi_v17(request_id):
     アイリ v17向け処理関数
     Streamのみ対応
     """
+    process_airi_v17_start_time = time.time()
     content = ""
     done = False
     #切り取りマーカーリスト
@@ -129,16 +134,23 @@ async def process_airi_v17(request_id):
         
         if done:
             break
+        if time.time() - process_airi_v17_start_time > LLM.loop_break_time:
+            console.print(f"<3分経過したため、タスクは強制終了されました。>\n{content_list}",style='red')
+            break
         await asyncio.sleep(0.2)
     for dict_data in content_list:
         for key,value in dict_data.items():
             console.print(f"{key}",style='green',end='')
             print(value)
 
+    process_airi_v17_start_time = time.time()
     #Check Tokens
     while True:
         #Stream後のLLM結果を受信
         request = requests.get(f"{config.GPT_Mangaer_URL}/LLM/get/?reset=false&del_request_id={request_id}").json()
+        if time.time() - process_airi_v17_start_time > LLM.loop_break_time:
+            console.print(f"<3分経過したため、タスクは強制終了されました。 Stream後の結果を受信できませんでした>\n{content_list}",style='red')
+            break
         if len(request)==0:
             await asyncio.sleep(1)
             continue
@@ -175,6 +187,7 @@ async def Statement_to_animMotion(request_id):
         requests.post(url=f"{config.AI_Tuber_URL}/Unity/animation/post/",json={"VRM_animation": gesture_str})
         console.print("<Unity> モーションを変更:",style='green',end='')
         print(gesture_str)
+    await asyncio.sleep(1)
 
 async def process_talk_logTosummary(request_id):
     #要約が受信された場合
@@ -184,7 +197,11 @@ async def process_talk_logTosummary(request_id):
     print(summary)
     requests.post(f"{config.AI_Tuber_URL}/summary/post",json={"summary":summary})
     requests.post(f"{config.AI_Tuber_URL}/summary_process/post/?summary_process=false")
-    
+    #要約したデータの消去
+    talk_log = requests.get(f"{config.AI_Tuber_URL}/talk_log/get?reset=true").json()
+    old_talk_log = summary_data.chara_talk_log
+    filtered_talk_logs = [item for item in talk_log if item not in old_talk_log]
+    requests.post(url=f"{config.AI_Tuber_URL}/talk_log/post",json=filtered_talk_logs)
     await asyncio.sleep(1)
 
 async def process_game_logTosummary(request_id):
@@ -195,4 +212,9 @@ async def process_game_logTosummary(request_id):
     print(summary)
     requests.post(f"{config.AI_Tuber_URL}/GameData/summary/post",json={"summary":summary})
     requests.post(f"{config.AI_Tuber_URL}/summary_process/post/?summray_game_process=false")
+    #要約したデータの消去
+    talk_log = requests.get(f"{config.AI_Tuber_URL}/GameData/talk_log/get?reset=true").json()
+    old_talk_log = summary_data.chara_talk_log
+    filtered_talk_logs = [item for item in talk_log if item not in old_talk_log]
+    requests.post(url=f"{config.AI_Tuber_URL}/GameData/talk_log/post",json=filtered_talk_logs)
     await asyncio.sleep(1)
