@@ -36,9 +36,7 @@ Fun"""
     director_list = []
 
     #VoiceVox
-    voicevox_name = 'AIRI'
-    speaker_uuid = "9f3ee141-26ad-437e-97bd-d22298d02ad2"
-    style_id = 20
+    voicevox_preset_id = 1
     voicevox_save_path = 'voice_data'
 
     requestList = {}
@@ -98,8 +96,7 @@ async def get_mic_recorded_str():
     return result
 
 async def request_llm(prompt_name,variables,stream=False):
-    current_time = int(time.time() * 1000)
-    request_id = str(current_time)
+    request_id = f"{prompt_name}-{int(time.time() * 1000)}"
     
     requests.post(f"{config.GPT_Mangaer_URL}/LLM/request/?prompt_name={prompt_name}&request_id={request_id}&stream_mode={stream}",json={"variables" : variables})
     requests.post(f"{config.AI_Tuber_URL}/LLM/process/post/?request_id={request_id}&prompt_name={prompt_name}&stream={stream}")
@@ -163,8 +160,8 @@ async def Mirai_15_model():
     # 会話検索エンジンの初期化
     print("初期化中...")
     await reset_similarity_search() #類似検索の初期化
+    voicevox_remove_all_presets()
     requests.get(f"{config.GPT_Mangaer_URL}/LLM/get/?reset=true")
-    Add_preset(1,config.voicevox_name,config.speaker_uuid,config.style_id) #ViceVoxの初期化
     print("初期化完了")
 
     # YoutubeAPIが設定されているか確認
@@ -219,7 +216,7 @@ async def Mirai_15_model():
 
             #Streamタスクについては即時タスク化
             for request in stream_true:
-                console.print(f"Process: {request['prompt_name']}",style='yellow')
+                console.print(f"Process: {request['prompt_name']} / ID: {request['request_id']}",style='yellow')
                 asyncio.create_task(LLM_config.process_function_map[request["prompt_name"]](request["request_id"]))
                 requests.get(f"{config.AI_Tuber_URL}/LLM/process/get/?del_request_id={request['request_id']}")
                 await asyncio.sleep(0)
@@ -246,6 +243,45 @@ async def Mirai_15_model():
 def process2_function():
     asyncio.run(Mirai_15_model())
 
+def generate_sub(chara_name,text):
+    pass
+
+def process3_function():
+    #オーディオの再生を行うプロセス　再生するだけで別プロセスか。。。
+    while requests.get(url=f"{config.AI_Tuber_URL}/Program_Fin_bool/get/").json() == False:
+        all_requests = requests.get(url=f"{config.AI_Tuber_URL}/text_to_vice/get?reset=true").json()
+        # 音声出力
+        for request_data in all_requests:
+            if request_data['service'] == 'voicevox':
+                # Voice Vox 読み上げ
+                talk_data = request_data['text']
+                all_presets = voicevox_Get_presets()
+
+                post_data = (config.voicevox_preset_id,"preset_1",
+                                           request_data['speaker_uuid'],
+                                           request_data['style_id'],
+                                           request_data['speedScale'],
+                                           request_data['pitchScale'],
+                                           request_data['intonationScale'],
+                                           request_data['volumeScale'],
+                                           request_data['prePhonemeLength'],
+                                           request_data['postPhonemeLength'])
+                if [item for item in all_presets if item['id'] == config.voicevox_preset_id] != []:
+                    voicevox_update_preset(*post_data)
+                else:
+                    print("Create VoiceVox New Preset")
+                    voicevox_Add_preset(*post_data)
+
+                console.print(f"<Voice> {request_data['chara_name']}:",style='green',end='')
+                print(talk_data)
+                generate_sub(request_data['chara_name'],talk_data)
+
+                stream = voicevox_audio_stream_start(request_data['lipsync'])
+                audio_data = voicevox_text_to_wave(talk_data,preset_id=config.voicevox_preset_id,speaker= request_data['style_id'])
+                stream.write(audio_data)
+                voicevox_audio_stream_stop(stream)
+        time.sleep(1)
+
 if __name__ == "__main__":
     
     requests.post(f"{config.AI_Tuber_URL}/Program_Fin_bool/post/?Program_Fin=false")
@@ -253,10 +289,13 @@ if __name__ == "__main__":
     #multiprocessing用プロセス作成
     process1 = multiprocessing.Process(target=process1_function)
     process2 = multiprocessing.Process(target=process2_function)
+    process3 = multiprocessing.Process(target=process3_function)
 
     #multiprocessingプロセス開始
     process1.start()
     process2.start()
+    process3.start()
 
     process1.join()
     process2.join()
+    process3.join()
