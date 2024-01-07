@@ -2,6 +2,7 @@ import requests,asyncio
 from module.voicevox import *
 from module.LLM_Request import summary_data
 from rich.console import Console
+from module.rich_desgin import error
 import time
 
 """
@@ -135,7 +136,7 @@ async def process_airi_v17(request_id):
         if done:
             break
         if time.time() - process_airi_v17_start_time > LLM.loop_break_time:
-            console.print(f"<3分経過したため、タスクは強制終了されました。>\n{content_list}",style='red')
+            error('Task Timeout.','3分経過したため、タスクは強制終了されました。',{'GPT_Raw_data':request,'Result':content_list})
             break
         await asyncio.sleep(0.2)
     for dict_data in content_list:
@@ -149,7 +150,7 @@ async def process_airi_v17(request_id):
         #Stream後のLLM結果を受信
         request = requests.get(f"{config.GPT_Mangaer_URL}/LLM/get/?reset=false&del_request_id={request_id}").json()
         if time.time() - process_airi_v17_start_time > LLM.loop_break_time:
-            console.print(f"<3分経過したため、タスクは強制終了されました。 Stream後の結果を受信できませんでした>\n{content_list}",style='red')
+            error('Task Timeout.','3分経過したため、タスクは強制終了されました。 Stream後の結果を受信できませんでした。',{'GPT_Raw_data':request,'Result':content_list})
             break
         if len(request)==0:
             await asyncio.sleep(1)
