@@ -7,12 +7,19 @@ def take_screenshot(monitor_number=1):
     """指定されたモニターのスクリーンショットを撮影する関数"""
     with mss.mss() as sct:
         monitors = sct.monitors
-        monitor = monitors[monitor_number]
+        try:
+            # 指定されたモニター番号が存在するか確認
+            monitor = monitors[monitor_number]
+        except IndexError:
+            # 存在しない場合はエラーメッセージを表示して関数を終了
+            print(f"Error: Monitor number {monitor_number} is not available.")
+            print(f"Available monitors are 1 to {len(monitors) - 1}.")
+            return {'ok':False,'Error':f"Error: Monitor number {monitor_number} is not available.\nAvailable monitors are 1 to {len(monitors) - 1}."}
         screenshot = sct.grab(monitor)
         
         # スクリーンショットをPIL Imageオブジェクトに変換
         img = Image.frombytes("RGB", screenshot.size, screenshot.bgra, "raw", "BGRX")
-        return img
+        return {'ok':True,"img":img}
 
 def crop_image(img, crop_area):
     """画像を特定の座標で切り抜く関数"""
@@ -42,7 +49,11 @@ if __name__ == "__main__":
     # 使用例
     monitor_number = 1  # 1番目のモニター
     screenshot = take_screenshot(monitor_number)
-    crop_area = (725, 1555, 3050, 2100)  
+    if screenshot['ok']:
+        screenshot = screenshot['img']
+    else:
+        raise ValueError(screenshot['Error'])
+    crop_area = [725, 1555, 3050, 2100]
     cropped_screenshot = crop_image(screenshot, crop_area)
     cropped_screenshot = fill_non_white_pixels_black(cropped_screenshot)
     save_path = f"cropped_monitor_{monitor_number}.png"
