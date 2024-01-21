@@ -38,7 +38,7 @@ if __name__ == "__main__":
     # 使用例
     monitor_number = 1  # 1番目のモニター
     screenshot = take_screenshot(monitor_number)
-    crop_area = (725, 1655, 3050, 2000)  
+    crop_area = (725, 1555, 3050, 2100)  
     cropped_screenshot = crop_image(screenshot, crop_area)
     cropped_screenshot = fill_non_white_pixels_black(cropped_screenshot)
     save_path = f"cropped_monitor_{monitor_number}.png"
