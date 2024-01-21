@@ -1,8 +1,8 @@
 import os
 import asyncio
 import sounddevice as sd
-import numpy as np
 import wave
+import aiofiles
 
 async def GnenereteVoiceData(script, 
                              narrator="Koharu Rikka", 
@@ -40,30 +40,18 @@ async def GnenereteVoiceData(script,
     await process.communicate()
 
     #再生秒数を計算
-    duration = get_wav_duration(outpath)
+    #duration = await get_wav_duration(outpath)
+    duration =100
+
+    print(f"save {save_fileName}")
     return  round(duration * 100) / 100
 
-async def PlayVoiceData(audio_dir=os.path.join(os.path.dirname(os.path.abspath(__file__)), "wav"),audio_fileName="output.wav",play_device_num=4):
-    audio_path = os.path.join(audio_dir, audio_fileName)
+async def get_wav_duration(filename):
+    async with aiofiles.open(filename, 'rb') as af:
+        # aiofilesを使用してファイルデータを読み込む
+        file_data = await af.read()
 
-    # 音声を再生
-    with wave.open(audio_path, 'rb') as wf:
-        samplerate = wf.getframerate()
-        channels = wf.getnchannels()  # チャンネル数を取得
-        data = wf.readframes(wf.getnframes())
-        audio_int16 = np.frombuffer(data, dtype=np.int16)
-        audio_float32 = audio_int16.astype(np.float32) / 32768.0  # int16 to float32 conversion
-        if channels == 2:  # ステレオの場合
-            audio_float32 = audio_float32.reshape(-1, 2)
-
-    # 指定したデバイスで音声を再生
-    with sd.OutputStream(samplerate=samplerate, channels=channels, device=chosen_device) as stream:
-        stream.write(audio_float32)
-
-    # wavファイルを削除
-    os.remove(audio_path)
-
-def get_wav_duration(filename):
+    # wave.openを使ってファイル情報を取得
     with wave.open(filename, 'rb') as wf:
         frames = wf.getnframes()
         rate = wf.getframerate()
@@ -81,7 +69,7 @@ def get_audio_devices():
     print(devices)
     return devices
 
-async def main(chosen_device):
+async def main():
     sentences = [
     "こんにちわ",
     "ねえ、きいて！",
@@ -109,20 +97,14 @@ async def main(chosen_device):
     "最近の悩みっていうか、将来どうなりたいのか分からないの。みんなはどうやって進路決めてるのかな。",
     "私、最近流行りのこのマンガにハマってて、毎晩読んでるんだよ。次の巻が待ち遠しい！おすすめしたい！"
     ]
-
+    result = []
     for sentence in sentences:
-
         # 音声データを生成
-        speak_time = await GnenereteVoiceData(sentence)
-        print(f"音声時間: {speak_time}")
-        # 音声データを再生
-        #await PlayVoiceData(play_device_num=chosen_device)
-        # 音声データをバックグラウンドで再生
-        asyncio.create_task(PlayVoiceData(play_device_num=chosen_device))
+        time_data = asyncio.create_task(GnenereteVoiceData(sentence,save_fileName=f"{sentence}.wav"))
+        result.append(time_data)
     
     await asyncio.gather(*asyncio.all_tasks())
+    print(result)
 
 if __name__ == "__main__":
-    get_audio_devices()
-    chosen_device = int(input("Enter the device index to use for playback: "))
-    asyncio.run(main(chosen_device))
+    asyncio.run(main())
