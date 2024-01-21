@@ -2,8 +2,10 @@
 from module.live_chat_fetcher import *
 from module.find_similar import AnswerFinder
 from module.CSV_toolkit import csv_to_dict_array
-from module.EasyOCR import *
+from module.cloud_vision import *
+from module.screenshot import *
 from module.voicevox import *
+from module.auto_key import *
 from rich.console import Console
 from fastapi import FastAPI,BackgroundTasks,HTTPException,Request
 from fastapi.responses import JSONResponse
@@ -62,7 +64,8 @@ class unity_data:
     unity_logs = []
 
 class ocr:
-    reader = None
+    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] ="D:\\GoogleDrive\\solo\\key\\ai-tuber-api-dc0b1b81cad7.json"
+    AutoTextScroll = False
 
 class OCRResult(BaseModel):
     coordinates: List[List[int]]
@@ -599,35 +602,36 @@ def get_Unity_Logs(reset: bool = False):
         unity_data.unity_logs = []
     return responce
 
-@app.get("/EasyOCR/start/",tags=["OCR"])
-def ocr_start():
-    """
-    EasyOCRを初期化します
-    """
-    ocr.reader=easyocr_render_reset()
-    return {'ok':True}
-
-@app.post("/EasyOCR/scan/",tags=["OCR"])
-def ocr_scan(app_name: str,capture_size: List[int],save_image: bool = False,white_black_filter:bool=True):
+@app.post("/OCR/scan/",tags=["OCR"])
+def ocr_scan(screen_num: int,capture_size: List[int] = [],save_image: str = "",white_black_filter:bool=True):
     """
     OCR スキャンを行います
     
     パラメータ:
-    - app_name: アプリケーション画面名を設定する。
+    - screen_num: スクリーンショットを撮影するディスプレイ番号を設定する。例:1
     - capture_size: スキャンする画面座標を指定します。例:[800, 1550, 3000, 2000]
-    - save_image: スキャンした画像を保存するかを設定します。
+    - save_image: スキャンした画像を保存する場合、パスを入力します。
     - white_black_fliter: 白以外の色のをすべて黒色に塗りつぶすフィルターをON/OFFします。
     """
-    if ocr.reader == None:
-        raise HTTPException(status_code=400, detail="Invalid ocr. Please initialize OCR.")
     if len(capture_size) != 4:
         raise HTTPException(status_code=400, detail="Invalid capture size. List must contain exactly 3 elements.")
-    screenshot = take_screenshot_of_window(app_name,tuple(capture_size),white_black_filter,save_image)
-    if screenshot is None:
-        raise HTTPException(status_code=400, detail="Could not obtain the specified application name.")
-    raw_data = read_ocr(ocr.reader,screenshot)
-    results = [OCRResult(coordinates=coords, text=text, confidence=conf) for coords, text, conf in raw_data]
-    return results
+    
+    monitor_number = screen_num 
+    screenshot = take_screenshot(monitor_number)
+    if screenshot['ok']:
+        screenshot = screenshot['img']
+    else:
+        raise HTTPException(status_code=400, detail=screenshot['Error'])
+    if capture_size != []:
+        cropped_screenshot = crop_image(screenshot, capture_size)
+        cropped_screenshot = screenshot
+    if white_black_filter:
+        cropped_screenshot = fill_non_white_pixels_black(cropped_screenshot)
+    if save_image != "":
+        save_path = f"{save_image}/cropped_monitor_{monitor_number}.png"
+        save_image(cropped_screenshot, save_path)
+    ocr_texts = cloud_vision_OCR(cropped_screenshot)
+    return ocr_texts
 
 class dokidoki_voice_config:
     # No.7,九州そら,猫使ビィ,四国めたん,青山龍星,ずんだもん
@@ -698,31 +702,60 @@ class dokidoki_voice_config:
         "postPhonemeLength": 0.1
         }]
 
-@app.post("/EasyOCR/scan/Doki_Doki_Literature_Club/",tags=["OCR"])
-def Doki_Doki_Literature_Club_ocr(Auto_Talk:bool = False,debug: bool = False):
+def parse_text(input_text):
+    # 会話文かどうかを判定するためのフラグ
+    if "「" in input_text and "」" in input_text:
+        # キャラクター名と会話文を分割
+        parts = input_text.split('\n', 1)
+        name = parts[0].strip()
+        text = parts[1].strip()
+    else:
+        # 会話文でない場合はナレーションとして扱う
+        name = "narration"
+        text = input_text.strip()
+    
+    # 結果を辞書で返す
+    return {"name": name, "text": text}
+
+@app.post("/test")
+def test():
+    send_key_to_app("Doki Doki Literature Club!", "space")
+
+@app.post("/OCR/scan/Doki_Doki_Literature_Club/",tags=["OCR"])
+async def Doki_Doki_Literature_Club_ocr(AutoVoice:bool = False,AutoScroll:int =1):
     """
     OCR スキャンを行います。このスキャンは、Doki Doki Literature Clubに対応しています。
     OCR結果を返します。スキャンしたOCR結果は、game_data.Game_talkLogに記録されます。
 
     パラメータ:
-    - debug
     """
-    if ocr.reader == None:
-        raise HTTPException(status_code=400, detail="Invalid ocr. Please initialize OCR.")
-    text_data = Doki_Doki_Literature_Club_Get_str(ocr.reader,debug)
-    print(text_data)
-    if text_data is None:
-        raise HTTPException(status_code=400, detail="Could not obtain the specified application name.")
-    if text_data["text"] != "":
-        game_data.Game_talkLog.append(text_data)
-        if Auto_Talk:
-            matching_chara_dict = next((item for item in dokidoki_voice_config.chara_list if item["chara_name"] == text_data['name']), dokidoki_voice_config.chara_list[-1])
-            matching_chara_dict.update({"text": text_data["text"],"subs": False,"service":'voicevox','lipsync':False})
-            text_to_vice_data.voice_requests.append(matching_chara_dict)
+    for i in range(AutoScroll):
+        #スペースキーを挿入
+        send_key_to_app("Doki Doki Literature Club!", "space")
+        await asyncio.sleep(0.5)
+        monitor_number = 1 
+        screenshot = take_screenshot(monitor_number)
+        if screenshot['ok']:
+            screenshot = screenshot['img']
+        else:
+            raise HTTPException(status_code=400, detail=screenshot['Error'])
+        
+        crop_area = (725, 1555, 3050, 2100)  
+        cropped_screenshot = crop_image(screenshot, crop_area)
+        cropped_screenshot = fill_non_white_pixels_black(cropped_screenshot)
+        ocr_texts = cloud_vision_OCR(cropped_screenshot)
+        parsed_text = parse_text(ocr_texts)#文章を辞書配列に変換
+        game_data.Game_talkLog.append(parsed_text)
 
-        return text_data
-    else:
-        return None
+        if AutoVoice:
+            matching_chara_dict = next((item for item in dokidoki_voice_config.chara_list if item["chara_name"] == parsed_text['name']), dokidoki_voice_config.chara_list[-1])
+            matching_chara_dict.update({"text": parsed_text["text"],"subs": False,"service":'voicevox','lipsync':False})
+            text_to_vice_data.voice_requests.append(matching_chara_dict)
+            while True:
+                if text_to_vice_data.voice_requests==[]:
+                    break
+                await asyncio.sleep(1)
+    return parsed_text
 
 @app.get("/GameData/talk_log/get",tags=["Games"])
 def get_game_talk_log(reset:bool = False):
@@ -866,12 +899,14 @@ def text_to_voice_post(post_data:voicevox_request):
     data = post_data.dict()
     data.update({'service':'voicevox'})
     text_to_vice_data.voice_requests.append(data)
+    return text_to_vice_data.voice_requests
 
-@app.get("/text_to_vice/get",tags=['Text to Voice'])
-def text_to_voice_get(reset:bool = False):
+@app.post("/text_to_vice/get", tags=['Text to Voice'])
+def text_to_voice_get(reset: dict = {}):
     data = text_to_vice_data.voice_requests
-    if reset:
-        text_to_vice_data.voice_requests = []
+    if reset != {}:
+        # reset リスト内の各要素に対して、voice_requests 内のデータを削除
+        text_to_vice_data.voice_requests = [item for item in text_to_vice_data.voice_requests if item != reset]
     return data
 
 def create_or_load_chroma_db_background(csv_directory,persist_directory):
