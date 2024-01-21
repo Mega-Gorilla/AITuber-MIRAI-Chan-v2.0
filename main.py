@@ -249,7 +249,7 @@ def generate_sub(chara_name,text):
 def process3_function():
     #オーディオの再生を行うプロセス　再生するだけで別プロセスか。。。
     while requests.get(url=f"{config.AI_Tuber_URL}/Program_Fin_bool/get/").json() == False:
-        all_requests = requests.get(url=f"{config.AI_Tuber_URL}/text_to_vice/get?reset=true").json()
+        all_requests = requests.post(url=f"{config.AI_Tuber_URL}/text_to_vice/get").json()
         # 音声出力
         for request_data in all_requests:
             if request_data['service'] == 'voicevox':
@@ -280,6 +280,7 @@ def process3_function():
                 audio_data = voicevox_text_to_wave(talk_data,preset_id=config.voicevox_preset_id,speaker= request_data['style_id'])
                 stream.write(audio_data)
                 voicevox_audio_stream_stop(stream)
+            responce =requests.post(url=f"{config.AI_Tuber_URL}/text_to_vice/get" ,json=request_data).json()
         time.sleep(1)
 
 if __name__ == "__main__":
