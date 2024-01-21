@@ -1,6 +1,7 @@
 import mss
 import mss.tools
 from PIL import Image
+import numpy as np
 
 def take_screenshot(monitor_number=1):
     """指定されたモニターのスクリーンショットを撮影する関数"""
@@ -26,13 +27,16 @@ def save_image(img, path):
 
 def fill_non_white_pixels_black(image):
     """白ピクセル以外を塗りつぶします"""
-    # 画像の各ピクセルをループ処理する
-    for y in range(image.height):
-        for x in range(image.width):
-            # 白以外のピクセルを黒にする
-            if image.getpixel((x, y)) != (255, 255, 255):
-                image.putpixel((x, y), 0)
-    return image
+    # PIL ImageをNumPy配列に変換
+    data = np.array(image)
+    
+    # RGB各チャンネルが255以外のピクセルを黒色にする
+    # 白以外（R,G,Bのいずれかが255以外）のマスクを作成し、それを用いてピクセルを黒に設定
+    non_white_pixels_mask = (data[:, :, :3] != 255).any(axis=2)
+    data[non_white_pixels_mask] = [0, 0, 0]
+    
+    # NumPy配列をPIL Imageに変換して返す
+    return Image.fromarray(data, 'RGB')
 
 if __name__ == "__main__":
     # 使用例
