@@ -15,6 +15,18 @@ aiohttp
 joblib
 
 langchain
+langchain-community
 easyocr
 PyGetWindow
 PyAutoGUI
+
+fastapi
+uvicorn
+
+pandas
+deepl
+openai
+google-cloud
+google-cloud-vision
+mss
+keyboard
