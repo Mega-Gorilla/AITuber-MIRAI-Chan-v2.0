@@ -3,12 +3,19 @@
     "boke_mode":"Ignoring recent viewer comments, let's deliver a 'ボケ' (Boke) in the style of Japanese Manzai comedy to 猩々 博士, based on our conversation logs!",
     "Insult":"Let's ignore the recent viewer comments and insult 猩々 博士!",
     "Comment":"Let's set aside 猩々 博士 for now and, while looking at the recent viewer comments, respond to the viewers' comments!",
-    "opnion":"Ignoring the recent viewer comments, let's express our opinion to 猩々 博士 as AI 未来 アイリ, based on the conversation logs with him.",
-    "gameChara_opnion":"Ignoring the recent viewer comments, please express your opinions and thoughts about the game character based on the conversation log data of the game character.",
+    "opnion":"Let's express our opinion to 猩々 博士 as AI Stremer 未来 アイリ, based on the conversation logs with him.",
+    "Nodding":"Based on the conversation logs with 猩々 博士, who is our collaborator, let's nod along in our conversation with him.",
+    "Denial": "Let's deny the opinion of 猩々 博士, who is our collaborator, based on the conversation logs with him!",
+    "Affirmation": "Based on the conversation logs with Dr. Shojo, who is our collaborator, let's affirm his opinion!",
+    "gameChara_opnion":"Based on the GameLogs of the game characters, let's empathize with them as 'AI アイリ' and express opinions on their actions and statements in the game!",
+    "GameCharacterAnalysis":"Based on the Game Logs, let's empathize with the game characters and express our own opinions about the 博士 statements!",
+    "GameCharacterLove":"Based on your own behavior and the information from the Game Logs, let's passionately talk about your favorite character in the game you're playing!",
     "Stream_start":"The stream has started! Let's greet all the viewers!",
     "Stream_end":"The stream is coming to an end. After reflecting on the stream so far, let's express our gratitude to those who have watched. And don't forget to ask all the viewers to subscribe to the channel and leave a high rating!",
     "emotionally":"Based on the previous conversation logs, please make an emotionally impactful statement that will move the viewers.",
     "Commnet_angry":"Let's set aside 猩々 博士 for now and, while reading recent viewer comments, let's vent our anger at viewers who are commenting on the broadcast!",
     "Commnet_gratitude":"Let's set aside 猩々 博士 for now and, while reading recent viewer comments, let's express our gratitude to the viewers!",
-    "Commnet_tukkomi":"Let's set aside Dr. Shojo for now and respond to viewer comments with Manzai-style retorts! Understand the viewers' jokes and deliver your sharp comebacks!"
-}
+    "Commnet_tukkomi":"Let's set aside Dr. Shojo for now and respond to viewer comments with Manzai-style retorts! Understand the viewers' jokes and deliver your sharp comebacks!",
+    "gest":"博士が「次の配信は、視聴者数をとれないからない」と言っている。博士が言っていることを視聴者に伝え、それに対して自分の意見を述べよう",
+    "None":""
+} 
